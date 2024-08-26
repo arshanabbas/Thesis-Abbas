@@ -1,0 +1,25 @@
+{
+  "categories": [
+    {
+      "id": 0,
+      "name": "Fusion"
+    },
+    {
+      "id": 1,
+      "name": "Hintergrund"
+    },
+    {
+      "id": 2,
+      "name": "Metall"
+    },
+    {
+      "id": 3,
+      "name": "Nebenbereich"
+    }
+  ],
+  "info": {
+    "year": 2024,
+    "version": "1.0",
+    "contributor": "Label Studio"
+  }
+}
