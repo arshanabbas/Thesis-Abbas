@@ -1,0 +1,10 @@
+# train and val data
+path: F:/Arshan_Abbas/Fabian/Task3/Code/Segmentation/Dataset
+train: images/train
+val: images/val'
+
+# number of classes
+nc: 4
+
+# class names
+names: ['Hintergrund', 'Metall', 'Fusion', 'Nebenbereich']
