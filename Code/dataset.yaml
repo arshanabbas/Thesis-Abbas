@@ -1,7 +1,6 @@
 # train and val data
-path: F:/Arshan_Abbas/Fabian/Task3/Code/Segmentation/Dataset
-train: images/train
-val: images/val'
+train: F:/Arshan_Abbas/Fabian/Task3/Code/Segmentation/Dataset/images/train
+val: F:/Arshan_Abbas/Fabian/Task3/Code/Segmentation/Dataset/images/val
 
 # number of classes
 nc: 4
