@@ -1,6 +1,6 @@
 # train and val data
-train: F:/Arshan_Abbas/Fabian/Task3/Code/Segmentation/Dataset/images/train
-val: F:/Arshan_Abbas/Fabian/Task3/Code/Segmentation/Dataset/images/val
+train: C:/Users/arab/Documents/GitHub/Segmentation/Dataset/images/train
+val: C:/Users/arab/Documents/GitHub/Segmentation/Dataset/images/val
 
 # number of classes
 nc: 4
