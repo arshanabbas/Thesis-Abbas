@@ -3,11 +3,12 @@ import matplotlib.pyplot as plt
 import json
 import os
 from pycocotools.coco import COCO
+import random
 
-# Path to the folder containing cropped images and the updated COCO annotation JSON
+# Path to the folder 
 cropped_images_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\COCO1\images_cropped"
 coco_annotation_path = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\COCO1\Test\new_result.json"
-visualized_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\COCO1\Visualized"
+visualized_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\COCO1\UpdatedVisualized"
 
 # Ensure the Visualized folder exists
 if not os.path.exists(visualized_folder):
@@ -19,6 +20,13 @@ with open(coco_annotation_path, 'r') as file:
 
 # Initialize COCO object to handle the annotations
 coco = COCO(coco_annotation_path)
+
+# Get the class names from the annotation file
+categories = coco.loadCats(coco.getCatIds())
+category_names = {category['id']: category['name'] for category in categories}
+
+# Generate random colors for each class and normalize to [0, 1]
+colors = {category_id: [random.randint(0, 255)/255.0, random.randint(0, 255)/255.0, random.randint(0, 255)/255.0] for category_id in category_names.keys()}
 
 # Iterate through each image in the cropped images folder
 for img_filename in os.listdir(cropped_images_folder):
@@ -48,9 +56,14 @@ for img_filename in os.listdir(cropped_images_folder):
         plt.imshow(image)
         plt.axis('off')  # Hide the axes
 
-        # Draw the segmentation polygons on the image
+        # Create a list for legend entries (class names and colors)
+        legend_entries = []
+
+        # Draw the segmentation polygons on the image and include class labels
         for ann in annotations:
             segmentation = ann['segmentation'][0]  # Assuming each annotation has a segmentation polygon
+            category_id = ann['category_id']
+            class_name = category_names[category_id]
 
             # Segmentation is a flat list, so we need to split it into x and y coordinates
             x_coords = segmentation[0::2]  # Even indices (x coordinates)
@@ -60,8 +73,22 @@ for img_filename in os.listdir(cropped_images_folder):
             x_coords.append(x_coords[0])
             y_coords.append(y_coords[0])
 
-            # Plot the segmentation polygon over the image
-            plt.plot(x_coords, y_coords, marker='o', color='r', linewidth=2)  # Red polygon for segmentation
+            # Plot the segmentation polygon over the image with a specific color
+            plt.plot(x_coords, y_coords, marker='o', color=colors[category_id], linewidth=2)  # Colored polygon for segmentation
+            
+            # Annotate with class label at the centroid of the polygon
+            centroid_x = sum(x_coords) / len(x_coords)
+            centroid_y = sum(y_coords) / len(y_coords)
+            plt.text(centroid_x, centroid_y, class_name, color=colors[category_id], fontsize=10, ha='center', va='center')
+
+            # Add the class to the legend if it's not already added
+            if class_name not in legend_entries:
+                legend_entries.append((class_name, colors[category_id]))
+
+        # Create a legend for the classes
+        handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color, markersize=10) for _, color in legend_entries]
+        labels = [label for label, _ in legend_entries]
+        plt.legend(handles=handles, labels=labels, loc='upper right', title="Classes")
 
         # Save the visualized image
         visualized_image_path = os.path.join(visualized_folder, img_filename)
