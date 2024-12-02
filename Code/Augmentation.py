@@ -10,12 +10,12 @@ from pathlib import Path
 from tqdm import tqdm
 
 # Paths to original dataset
-original_images_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\COCO1\images_cropped"
-coco_annotation_path = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\COCO1\Test\new_result.json"
+original_images_folder = r"F:\Arshan_Abbas\Fabian\Task3\Code\Thesis-Abbas\CPDataset\images"
+coco_annotation_path = r"F:\Arshan_Abbas\Fabian\Task3\Code\Thesis-Abbas\CPDataset\new_result.json"
 
 # Folder to save augmented images and masks
-augmented_images_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\Augmented\images"
-augmented_masks_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas\Augmented\masks"
+augmented_images_folder = r"F:\Arshan_Abbas\Fabian\Task3\Code\NoSync\Augmented\images"
+augmented_masks_folder = r"F:\Arshan_Abbas\Fabian\Task3\Code\NoSync\Augmented\masks"
 
 # Ensure the augmented folder exists
 Path(augmented_images_folder).mkdir(parents=True, exist_ok=True)
