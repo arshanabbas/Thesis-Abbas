@@ -4,14 +4,6 @@ from pycocotools.coco import COCO
 import os
 
 def create_multi_channel_masks(annotation_file, output_dir, num_classes):
-    """
-    Converts COCO-style polygon annotations into multi-channel masks (one channel per class).
-
-    Args:
-        annotation_file (str): Path to the COCO-style JSON file with polygon annotations.
-        output_dir (str): Directory to save the generated multi-channel masks.
-        num_classes (int): Total number of classes in the dataset.
-    """
     # Load COCO annotations
     print("Creating index...")
     coco = COCO(annotation_file)
@@ -48,8 +40,8 @@ def create_multi_channel_masks(annotation_file, output_dir, num_classes):
         print(f"Saved mask for image {img['file_name']} to {mask_file_path}")
 
 # Example Usage
-annotation_file = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas/CPDataset/new_result.json"  # Replace with your JSON annotation file path
-output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/Mask"  # Replace with your desired output directory
-num_classes = 4  # Replace with the total number of classes in your dataset
+annotation_file = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas/CPDataset/new_result.json" 
+output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/Mask"  
+num_classes = 4 
 
 create_multi_channel_masks(annotation_file, output_dir, num_classes)
