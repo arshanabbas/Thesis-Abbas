@@ -1,9 +1,9 @@
-def visualize_mask_with_image(image_path, mask_path, class_colors):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from PIL import Image
-    import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+import cv2
 
+def visualize_mask_with_image(image_path, mask_path, class_colors):
     # Load the image and mask
     image = np.array(Image.open(image_path).convert("RGB"))
     mask = np.load(mask_path)
@@ -20,7 +20,6 @@ def visualize_mask_with_image(image_path, mask_path, class_colors):
 
     # Blend the original image with the overlay
     blended = cv2.addWeighted(image, 0.5, overlay, 0.5, 0)
-    cv2.imwrite("F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/Mask/overlay_output.jpg", blended)
 
     # Display the blended image
     plt.figure(figsize=(10, 10))
@@ -29,15 +28,19 @@ def visualize_mask_with_image(image_path, mask_path, class_colors):
     plt.title("Overlay of Multi-Channel Mask on Image")
     plt.show()
 
+    # Print unique colors in the overlay
+    unique_colors = np.unique(overlay.reshape(-1, 3), axis=0)
+    print("Unique colors in the overlay:", unique_colors)
+
 # Example usage
 image_path = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas/CPDataset/images/0a05af59-10-19.3.jpg"  
 mask_path = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/Mask/0a05af59-10-19_mask.npy" 
 
 class_colors = {
-    0: (255, 0, 0),    # R 
-    1: (0, 255, 0),    # G
-    2: (0, 0, 255),    # B
-    3: (255, 255, 0),  # Y
+    0: (255, 0, 0),    # Red for Background
+    1: (0, 255, 0),    # Green for Metall
+    2: (0, 0, 255),    # Blue for Nebenbereich
+    3: (255, 255, 0),  # Yellow for Fusion
 }
 
 visualize_mask_with_image(image_path, mask_path, class_colors)

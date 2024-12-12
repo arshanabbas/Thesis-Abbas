@@ -6,9 +6,9 @@ from pycocotools.coco import COCO
 import random
 
 # Path to the folder 
-cropped_images_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\COCO1\images_cropped"
-coco_annotation_path = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\COCO1\Test\new_result.json"
-visualized_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\COCO1\UpdatedVisualized"
+cropped_images_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\Output\Images"
+coco_annotation_path = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\Output\updated_result.json"
+visualized_folder = r"F:\Pomodoro\Work\TIME\Script\Thesis-Abbas-Segmentation\Output\UpdatedVisualized"
 
 # Ensure the Visualized folder exists
 if not os.path.exists(visualized_folder):
