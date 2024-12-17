@@ -33,8 +33,8 @@ def visualize_mask_with_image(image_path, mask_path, class_colors):
     print("Unique colors in the overlay:", unique_colors)
 
 # Example usage
-image_path = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas/CPDataset/images/0a05af59-10-19.3.jpg"  
-mask_path = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/Mask/0a05af59-10-19_mask.npy" 
+image_path = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas/CPDataset/images/1b7c32a1-10-23.1.jpg"  
+mask_path = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/Mask/1b7c32a1-10-23_mask.npy" 
 
 class_colors = {
     0: (255, 0, 0),    # Red for Background

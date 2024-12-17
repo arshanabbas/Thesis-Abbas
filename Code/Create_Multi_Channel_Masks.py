@@ -40,7 +40,7 @@ def create_multi_channel_masks(annotation_file, output_dir, num_classes):
         print(f"Saved mask for image {img['file_name']} to {mask_file_path}")
 
 # Example Usage
-annotation_file = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas/CPDataset/new_result.json" 
+annotation_file = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas/CPDataset/result.json" 
 output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/Mask"  
 num_classes = 4 
 
