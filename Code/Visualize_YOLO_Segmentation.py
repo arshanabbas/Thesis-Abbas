@@ -9,7 +9,6 @@ COLORS = [
     (0, 255, 0),    # Green for Class 1
     (0, 0, 255),    # Blue for Class 2
     (255, 255, 0),  # Yellow for Class 3
-    (255, 0, 255),  # Magenta for Class 4
 ]
 
 # Function to add a legend
@@ -78,10 +77,11 @@ def visualize_segmentation(image_dir, annotation_dir, class_names, output_dir=No
         else:
             plt.show()
 
+
 # Example usage
 image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/CPDataset/images"
 annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/CPDataset/YOLOv8"
-output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/CPDataset/visualcheck" 
-class_names = ["Class 0", "Class 1", "Class 2", "Class 3", "Class 4"]  # Update with your class names
+output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/CPDataset/visualcheck_Copy" 
+class_names = ["Hintergrund", "Metall", "Nebenbereich", "Fusion"]  # Update with your class names
 
 visualize_segmentation(image_dir, annotation_dir, class_names, output_dir)
