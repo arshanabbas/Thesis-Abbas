@@ -1,6 +1,6 @@
 # train and val data
-train: C:/Users/arab/Documents/GitHub/Segmentation/Dataset/images/train
-val: C:/Users/arab/Documents/GitHub/Segmentation/Dataset/images/val
+train: D:/Abbas/GitHub/PolygontoYOLO/dataset/images/train
+val: D:/Abbas/GitHub/PolygontoYOLO/dataset/images/val
 
 # number of classes
 nc: 4
