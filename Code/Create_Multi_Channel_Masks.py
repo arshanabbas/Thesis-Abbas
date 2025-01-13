@@ -9,10 +9,10 @@ def create_multi_channel_masks(annotation_file, output_dir, num_classes):
     coco = COCO(annotation_file)
     print("Index created!")
 
-    # Ensure output directory exists
+    # Output directory
     os.makedirs(output_dir, exist_ok=True)
 
-    # Iterate through all images in the dataset
+    # Iterate through all images
     for img_id in coco.getImgIds():
         # Load image metadata
         img = coco.loadImgs(img_id)[0]
@@ -22,13 +22,13 @@ def create_multi_channel_masks(annotation_file, output_dir, num_classes):
         # Initialize an empty multi-channel mask
         mask = np.zeros((num_classes, height, width), dtype=np.uint8)
 
-        # Loop through all annotations
+        # Loop
         for ann in anns:
             class_id = ann['category_id']  # Get the class ID (channel index)
             rle = mask_utils.frPyObjects(ann['segmentation'], height, width)
             binary_mask = mask_utils.decode(rle).astype(np.uint8)
 
-            # Use np.where() to locate the relevant indices
+            # Use np.where()
             coords = np.where(binary_mask > 0)
             mask[class_id, coords[0], coords[1]] = 1
 

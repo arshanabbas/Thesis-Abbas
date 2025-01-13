@@ -17,16 +17,8 @@ def add_legend(ax, classes):
                       for i in range(len(classes))]
     ax.legend(handles=legend_patches, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=len(classes))
 
-# Visualization function
+# Visualization
 def visualize_segmentation(image_dir, annotation_dir, class_names, output_dir=None):
-    """
-    Visualizes YOLOv8 segmentation annotations on images.
-
-    :param image_dir: Directory containing the images.
-    :param annotation_dir: Directory containing YOLOv8 annotation files.
-    :param class_names: List of class names (e.g., ['Class 0', 'Class 1']).
-    :param output_dir: Directory to save visualized images (optional).
-    """
     os.makedirs(output_dir, exist_ok=True) if output_dir else None
 
     for annotation_file in os.listdir(annotation_dir):
@@ -82,6 +74,6 @@ def visualize_segmentation(image_dir, annotation_dir, class_names, output_dir=No
 image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/CPDataset/images"
 annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/CPDataset/YOLOv8"
 output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/CPDataset/visualcheck_Copy" 
-class_names = ["Hintergrund", "Metall", "Nebenbereich", "Fusion"]  # Update with your class names
+class_names = ["Hintergrund", "Metall", "Nebenbereich", "Fusion"] 
 
 visualize_segmentation(image_dir, annotation_dir, class_names, output_dir)

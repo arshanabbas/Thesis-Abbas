@@ -19,7 +19,7 @@ def update_ignored_class(annotation_dir, ignored_class_id, new_class_id):
                 parts[0] = str(new_class_id)  # Update the class ID
             updated_lines.append(' '.join(parts))
         
-        # Write updated contents back to the file
+        # Write updated contents
         with open(file_path, 'w') as file:
             file.write('\n'.join(updated_lines) + '\n')
     
