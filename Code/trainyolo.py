@@ -8,4 +8,4 @@ model = YOLO("D:/Abbas/GitHub/PolygontoYOLO/yolo11n-seg.pt")
 data = 'C:/Users/arab/Documents/GitHub/Thesis-Abbas/Code/dataset.yaml'
 
 # Start training
-results = model.train(data= "D:/Abbas/GitHub/Thesis-Abbas/Code/dataset.yaml", epochs=1, imgsz=1024)
+results = model.train(data= "D:/Abbas/GitHub/Thesis-Abbas/Code/dataset.yaml", epochs=100, imgsz=1024)
