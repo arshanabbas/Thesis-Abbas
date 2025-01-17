@@ -6,4 +6,4 @@ val: D:/Abbas/GitHub/PolygontoYOLO/dataset/images/val
 nc: 4
 
 # class names
-names: ['Hintergrund', 'Metall', 'Fusion', 'Nebenbereich']
+names: ['Hintergrund', 'Metall', 'Nebenbereich', 'Fusion']
