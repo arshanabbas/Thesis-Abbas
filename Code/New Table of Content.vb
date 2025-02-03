@@ -2,7 +2,7 @@ Table of Contents
 1. Introduction
 1.1 Motivation for AI in Welding Defect Detection
 1.2 Challenges in Traditional Non-Destructive Testing (NDT)
-1.3 Role of AI & Digital Twin in Smart Manufacturing
+1.3 Role of AI in Smart Manufacturing
 1.4 Objectives and Research Scope
 1.5 Contributions of This Research
 
