@@ -3,15 +3,15 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Define a color palette for the classes
+#color
 COLORS = [
-    (255, 0, 0),    # Red for Class 0
-    (0, 255, 0),    # Green for Class 1
-    (0, 0, 255),    # Blue for Class 2
-    (255, 255, 0),  # Yellow for Class 3
+    (255, 0, 0),    # Red
+    (0, 255, 0),    # Green
+    (0, 0, 255),    # Blue
+    (255, 255, 0),  # Yellow
 ]
 
-# Function to add a legend
+# Function legend
 def add_legend(ax, class_names):
     legend_patches = [plt.Line2D([0], [0], color=np.array(COLORS[i]) / 255, lw=5, label=f'Class {i}')
                       for i in range(len(class_names))]
@@ -70,7 +70,7 @@ def visualize_segmentation(image_dir, annotation_dir, class_names, output_dir=No
             plt.show()
 
 
-# Example usage
+#Use
 image_dir = "F:/Arshan_Abbas/Fabian/Task3/Code/PolygontoYOLO/images"
 annotation_dir = "F:/Arshan_Abbas/Fabian/Task3/Code/PolygontoYOLO/YOLOv8"
 output_dir = "F:/Arshan_Abbas/Fabian/Task3/Code/PolygontoYOLO/Contours"
