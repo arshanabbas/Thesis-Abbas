@@ -7,11 +7,13 @@ Table of Contents
 
 2. Background on Deep Learning and Computer Vision
     2.1 Introduction to Image Classification
-        2.1.1 Core concepts and applications
+        2.1.1 Core concepts, models and applications
     2.2 Introduction to Sementic Segmentation
-        2.2.1 Core concepts and applications
+        2.2.1 Core concepts
+        2.2.2 Popular architecture in Semantic Segmentation
     2.3 Introduction to Object Detection
-        2.3.1 Core concepts and applications
+        2.3.1 Core concepts
+        2.3.2 State of the art models in Object Detection
 
 3. Welding Defects: Introduction, State of Art,  Causes, and Industrial Standards
     3.1 Introduction to Welding Defects
@@ -53,6 +55,12 @@ Table of Contents
 
 Bibliography
 
+
+--> Data Collection
+--> Data Annotation
+--> Data Preprocessing
+--> Model Training
+--> Model Evealuation
 
 1.2 Challenges in Traditional Non-Destructive Testing (NDT)
 1.4 Objectives and Research Scope
