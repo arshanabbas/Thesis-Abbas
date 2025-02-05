@@ -19,13 +19,12 @@ transform = A.Compose([
     A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=0.2),  # Contrast Limited Adaptive Histogram Equalization
     A.RandomGamma(gamma_limit=(80, 120), p=0.1),  # Random Gamma for contrast enhancement
     A.Sharpen(p=0.1),  # Sharpening the image for better details
-    A.Posterize(num_bits=4, p=0.1),  # Reduce the color depth for better effects, similar to "artistic" enhancement
-    A.Equalize(p=0.2)  # General histogram equalization
+    A.Equalize(p=0.1)  # General histogram equalization
 ])
 
 # Path to the main folder containing the 19 classes
-main_folder = "D:/Abbas/ubergabe/Playground/Input"
-output_folder = "D:/Abbas/ubergabe/Playground/Output"
+main_folder = "D:/Abbas/ubergabe/Data/train"
+output_folder = "D:/Abbas/ubergabe/Playground/train"
 
 # Create output folder if it doesn't exist
 os.makedirs(output_folder, exist_ok=True)
