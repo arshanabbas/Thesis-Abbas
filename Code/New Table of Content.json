@@ -1,0 +1,85 @@
+Table of Contents
+
+1. Introduction
+    1.1 Motivation for AI in Welding Defect Generation and Detection
+    1.2 Role of AI in Smart Manufacturing
+    1.3 Structure for Thesis
+
+2. State of the Art
+   2.1 Welding: Advancements, Procedures, Techniques, and Defects
+        2.1.1 Introduction to Welding
+            Overview of Welding as a Manufacturing Process
+            Importance of Welding in Industrial Applications
+            Evolution of Welding Technologies Over Time
+        2.1.2 Recent Advancements in Welding Technologies
+            Automation & Robotics in Welding
+            Smart Welding Systems & IoT Integration
+        2.1.3 Types of Welding Processes
+            Fusion Welding: Arc Welding (SMAW, GTAW, GMAW, FCAW) || Gas Welding (Oxyfuel Welding) || Resistance Welding (Spot Welding, Seam Welding)
+            Solid-State Welding
+            Ultrasonic Welding
+            Laser Welding
+        2.1.4 Welding Standards and Regulations
+            International & Industrial Welding Norms
+            ISO Standards (DIN EN ISO 5817)
+            European Welding Standards (EN ISO 15614-1)
+        2.1.5 Welding Defects: Classification
+            Types of Welding Defects
+            Surface Defects: Cracks, Undercut, Overlap, Excess Weld Metal
+            Dimensional Defects: Misalignment, Distortion, Burn Through
+        2.1.6 Impact of Welding Defects on Structural Integrity 
+            Effects on Mechanical Strength & Fatigue Life, 
+            Safety Concerns in Industrial & Structural Applications || Case Studies: Failures Due to Welding Defects
+            Need for AI-Driven Automated Defect Detection in Welding)
+    
+    2.2 AI and Computer Vision in Welding Defect Analysis
+        2.2.1 Introduction to Image Classification
+            Core concepts, models, and applications
+        2.2.2 Introduction to Semantic Segmentation
+            Core concepts
+            Popular architectures in Semantic Segmentation
+        2.2.3 Introduction to Object Detection
+            Core concepts
+            State-of-the-art models in Object Detection
+        2.2.4 The Role of AI in Automated Welding Defect Detection
+        2.2.5 Connecting AI & Welding: Challenges and Opportunities
+
+3. Virtual Generation of Welding Defects using Digital Twin Technology
+    3.1 Digital Twin Concept in Smart Manufacturing
+    3.2 Simulation of Welding Defects in a Virtual Environment
+    3.3 Synthetic Data Generation for AI Training
+    3.4 Bridging the Gap Between Simulated and Real-World Data
+    3.5 Advantages of Digital Twin in Defect Generation
+    3.6 Result and Analysis
+        3.6.1 Overview of the generated defects
+    3.7 Conclusion
+        3.7.1 Key Insights and Implications
+        3.7.2 Key Takeaways
+
+4. AI-Based Welding Defect Detection System
+    4.1 Data Preprocessing & Image Enhancement Techniques
+    4.2 Deep Learning Architectures for Defect Detection
+        4.2.1 Convolutional Neural Networks (CNNs)
+        4.2.2 YOLO for Real-Time Defect Identification
+        4.2.3 Transformer-Based Vision Models for Industrial AI
+    4.3 Data Augmentation & Domain Adaptation for Robust Defect Recognition
+    4.4 Result and Analysis
+        4.4.1 Overview of the generated defects
+    4.5 Conclusion
+        4.5.1 Key Insights and Implications
+        4.5.2 Key Takeaways
+
+5. Conclusion and Future Research
+    5.1 Conclusion
+    5.2 Future Enhancements: Real-Time AI, Edge Computing & Robotics
+    5.3 Potential for Fully Automated Welding Quality Inspection
+
+Bibliography
+
+
+--> Data Collection
+--> Data Annotation
+--> Data Preprocessing
+--> Model Training
+--> Model Evealuation
+
