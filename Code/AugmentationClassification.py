@@ -23,8 +23,8 @@ transform = A.Compose([
 ])
 
 # Path to the main folder containing the 19 classes
-main_folder = "D:/Abbas/ubergabe/Data/train"
-output_folder = "D:/Abbas/ubergabe/Playground/train"
+main_folder = "D:/Abbas/ubergabe/Data/val"
+output_folder = "D:/Abbas/ubergabe/Playground/val"
 
 # Create output folder if it doesn't exist
 os.makedirs(output_folder, exist_ok=True)
