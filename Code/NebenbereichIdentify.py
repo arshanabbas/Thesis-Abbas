@@ -3,22 +3,11 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Define a color palette for the classes
-COLORS = [
-    (255, 0, 0),    # Red for Class 0
-    (0, 255, 0),    # Green for Class 1
-    (0, 0, 255),    # Blue for Class 2
-    (255, 255, 0),  # Yellow for Class 3
-]
-
-# Function to add a legend
-def add_legend(ax, classes):
-    legend_patches = [plt.Line2D([0], [0], color=np.array(COLORS[i]) / 255, lw=5, label=f'Class {i}')
-                      for i in range(len(classes))]
-    ax.legend(handles=legend_patches, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=len(classes))
+# Define color for Class 2 (Blue)
+CLASS_2_COLOR = (0, 0, 255)  # Blue for Class 2
 
 # Visualization
-def visualize_segmentation(image_dir, annotation_dir, class_names, output_dir=None):
+def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
     os.makedirs(output_dir, exist_ok=True) if output_dir else None
 
     for annotation_file in os.listdir(annotation_dir):
@@ -44,36 +33,37 @@ def visualize_segmentation(image_dir, annotation_dir, class_names, output_dir=No
                 class_id = int(parts[0])
                 polygon = list(map(float, parts[1:]))
 
+                # Only process Class 2 (Nebenbereich)
+                if class_id != 2:
+                    continue
+
                 # Normalize and map coordinates to image dimensions
                 points = [(int(polygon[i] * image.shape[1]), int(polygon[i + 1] * image.shape[0]))
                           for i in range(0, len(polygon), 2)]
                 points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
 
-                # Draw filled polygon
-                cv2.fillPoly(image, [points], COLORS[class_id % len(COLORS)])
+                # Draw polygon outline instead of filling
+                cv2.polylines(image, [points], isClosed=True, color=CLASS_2_COLOR, thickness=1)
 
                 # Draw class ID at the first point
-                cv2.putText(image, f"{class_id}", points[0][0], cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(image, "2", tuple(points[0][0]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-        # Plot with legend
+        # Plot
         fig, ax = plt.subplots(figsize=(10, 10))
         ax.imshow(image)
         ax.axis('off')
-        add_legend(ax, class_names)
 
-        # Save or display
+        # Remove white border when saving
         if output_dir:
             output_path = os.path.join(output_dir, image_name)
-            plt.savefig(output_path, bbox_inches='tight')
+            plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
             plt.close(fig)
         else:
             plt.show()
 
-
 # Example usage
-image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/images"
-annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/YOLOv8"
-output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/visualcheck_Cop" 
-class_names = ["Hintergrund", "Metall", "Nebenbereich", "Fusion"] 
+image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images"
+annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8"
+output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/visualisation" 
 
-visualize_segmentation(image_dir, annotation_dir, class_names, output_dir)
+visualize_class2_segmentation(image_dir, annotation_dir, output_dir)
