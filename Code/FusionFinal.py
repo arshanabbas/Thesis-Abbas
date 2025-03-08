@@ -14,7 +14,7 @@ MIN_TOTAL_PORES = 20  # Minimum pores per image
 MAX_TOTAL_PORES = 40  # Maximum pores per image
 MIN_CLUSTERS = 2  # At least two clusters per image
 MAX_CLUSTERS = 3  # Maximum number of clusters
-MIN_DISTANCE_BETWEEN_PORES = 2  # Reduced minimum distance to prevent overlap issues
+MIN_DISTANCE_BETWEEN_PORES = 1  # Reduced minimum distance to prevent overlap issues
 
 # Function to check if a point is inside a polygon
 def is_point_inside_polygon(point, polygon):
@@ -29,14 +29,14 @@ def generate_balanced_pores(polygon, img_shape):
     x_min, y_min = np.min(polygon, axis=0)[0]
     x_max, y_max = np.max(polygon, axis=0)[0]
     
-    max_attempts = 50  # Limited attempts per pore placement to avoid infinite loops
+    max_attempts = 100  # Limited attempts per pore placement to avoid infinite loops
     num_clusters = random.randint(MIN_CLUSTERS, MAX_CLUSTERS)  
     cluster_centers = [(random.randint(x_min, x_max), random.randint(y_min, y_max)) for _ in range(num_clusters)]
     
     # Define total pores ensuring minimum count
     num_pores = max(MIN_TOTAL_PORES, random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES))
     cluster_pore_count = min(random.randint(5, 10) * num_clusters, num_pores - 5)
-    scattered_pore_count = num_pores - cluster_pore_count  
+    scattered_pore_count = max(7, num_pores - cluster_pore_count)  
     
     def is_far_enough(new_x, new_y, new_r):
         for (x, y, w, h, _) in pores:
