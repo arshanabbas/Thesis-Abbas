@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Define color for Class 3 (Green)
-CLASS_3_COLOR = (0, 255, 0)  # Green for Class 3
+CLASS_3_COLOR = (64, 64, 64)  
 
 # Visualization
 def visualize_class3_segmentation(image_dir, annotation_dir, output_dir=None):
