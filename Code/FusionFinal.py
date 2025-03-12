@@ -17,7 +17,7 @@ MIN_DISTANCE_BETWEEN_CLUSTER_PORES = 2
 MIN_DISTANCE_BETWEEN_SCATTERED_PORES = 4
 PORE_CLASS_ID = 0
 PORE_NEST_CLASS_ID = 1
-CLUSTER_PADDING = 10  # Added padding to cluster bounding box
+CLUSTER_PADDING = 10  # Extra space around cluster bounding box
 
 # ----------------------- Helper Functions -----------------------
 def is_point_inside_polygon(point, polygon):
@@ -52,26 +52,31 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
                 return False
         return True
 
-    # Cluster Pores
-    cluster_pore_positions = []
+    # Cluster Pores - separated by clusters
+    cluster_pore_positions = [[] for _ in range(num_clusters)]  # Each cluster's pores stored separately
     cluster_success, total_cluster_attempts = 0, 0
     max_total_cluster_attempts = cluster_pore_count * max_attempts
+
     while cluster_success < cluster_pore_count and total_cluster_attempts < max_total_cluster_attempts:
         total_cluster_attempts += 1
-        cx, cy = random.choice(cluster_centers)
+        chosen_cluster_idx = random.randint(0, num_clusters - 1)
+        cx, cy = cluster_centers[chosen_cluster_idx]
         x, y = int(cx + random.randint(-10, 10)), int(cy + random.randint(-10, 10))
         w, h, angle = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(0, 180)
+
         if is_point_inside_polygon((x, y), polygon) and is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_CLUSTER_PORES):
             pores.append((x, y, w, h, angle))
-            cluster_pore_positions.append((x, y, w, h))
+            cluster_pore_positions[chosen_cluster_idx].append((x, y, w, h))
             cluster_success += 1
 
     if cluster_success < cluster_pore_count:
         print(f"Warning: Only {cluster_success}/{cluster_pore_count} cluster pores generated.")
 
-    # Cluster bounding box with extra padding
-    if cluster_pore_positions:
-        xs, ys, ws, hs = zip(*cluster_pore_positions)
+    # Separate bounding boxes for each cluster
+    for cluster_idx, cluster_pores in enumerate(cluster_pore_positions):
+        if not cluster_pores:  # Skip empty clusters
+            continue
+        xs, ys, ws, hs = zip(*cluster_pores)
         min_x = max(0, min(xs) - max(ws) - CLUSTER_PADDING)
         max_x = min(img_shape[1], max(xs) + max(ws) + CLUSTER_PADDING)
         min_y = max(0, min(ys) - max(hs) - CLUSTER_PADDING)
@@ -115,6 +120,8 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
         if not os.path.exists(image_path):
             print(f"Image {image_name} not found. Skipping...")
             continue
+
+        print(f"Processing: {image_name}")  # Optional: To monitor which files are processed
 
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
