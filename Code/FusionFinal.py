@@ -17,7 +17,8 @@ MIN_DISTANCE_BETWEEN_CLUSTER_PORES = 2
 MIN_DISTANCE_BETWEEN_SCATTERED_PORES = 4
 PORE_CLASS_ID = 0
 PORE_NEST_CLASS_ID = 1
-CLUSTER_PADDING = 10  # Extra space around cluster bounding box
+CLUSTER_PADDING = 10  # Padding around cluster bounding boxes
+PORE_PADDING = 3      # Padding around scattered pore bounding boxes
 
 # ----------------------- Helper Functions -----------------------
 def is_point_inside_polygon(point, polygon):
@@ -52,8 +53,8 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
                 return False
         return True
 
-    # Cluster Pores - separated by clusters
-    cluster_pore_positions = [[] for _ in range(num_clusters)]  # Each cluster's pores stored separately
+    # Cluster Pores - separated per cluster
+    cluster_pore_positions = [[] for _ in range(num_clusters)]
     cluster_success, total_cluster_attempts = 0, 0
     max_total_cluster_attempts = cluster_pore_count * max_attempts
 
@@ -73,8 +74,8 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         print(f"Warning: Only {cluster_success}/{cluster_pore_count} cluster pores generated.")
 
     # Separate bounding boxes for each cluster
-    for cluster_idx, cluster_pores in enumerate(cluster_pore_positions):
-        if not cluster_pores:  # Skip empty clusters
+    for cluster_pores in cluster_pore_positions:
+        if not cluster_pores:
             continue
         xs, ys, ws, hs = zip(*cluster_pores)
         min_x = max(0, min(xs) - max(ws) - CLUSTER_PADDING)
@@ -86,7 +87,7 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         bx, by, bw, bh = convert_to_yolo_bbox(cx, cy, cluster_w / 2, cluster_h / 2, img_shape[1], img_shape[0])
         labels.append((PORE_NEST_CLASS_ID, bx, by, bw, bh))
 
-    # Scattered Pores
+    # Scattered Pores with Padding
     scatter_success, total_scatter_attempts = 0, 0
     max_total_scatter_attempts = scattered_pore_count * max_attempts
     while scatter_success < scattered_pore_count and total_scatter_attempts < max_total_scatter_attempts:
@@ -95,7 +96,10 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         w, h, angle = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(0, 180)
         if is_point_inside_polygon((x, y), polygon) and is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_SCATTERED_PORES):
             pores.append((x, y, w, h, angle))
-            bx, by, bw, bh = convert_to_yolo_bbox(x, y, w, h, img_shape[1], img_shape[0])
+            # Apply padding
+            padded_w = w + PORE_PADDING
+            padded_h = h + PORE_PADDING
+            bx, by, bw, bh = convert_to_yolo_bbox(x, y, padded_w, padded_h, img_shape[1], img_shape[0])
             labels.append((PORE_CLASS_ID, bx, by, bw, bh))
             scatter_success += 1
 
@@ -121,7 +125,7 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
             print(f"Image {image_name} not found. Skipping...")
             continue
 
-        print(f"Processing: {image_name}")  # Optional: To monitor which files are processed
+        print(f"Processing: {image_name}")
 
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -142,7 +146,8 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
                     cv2.ellipse(image, (x, y), (w, h), angle, 0, 360, (gray, gray, gray), -1)
 
         save_yolo_labels(output_labels_dir, image_name, label_list)
-        plt.imsave(os.path.join(output_images_dir, image_name), image)
+        plt.imsave(os.path.join(output_images_dir, image_name), image
+
 # ----------------------- Example -----------------------
 # # Example usage
 image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images"
