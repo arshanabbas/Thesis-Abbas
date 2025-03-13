@@ -78,7 +78,7 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         # Angular and radial random placement
         angle_deg = random.uniform(0, 360)
         angle_rad = np.deg2rad(angle_deg)
-        placement_radius = random.uniform(5, 20)  # Spread control
+        placement_radius = random.uniform(5, 20)  # Cluster spread control
         x = int(cx + placement_radius * np.cos(angle_rad))
         y = int(cy + placement_radius * np.sin(angle_rad))
 
@@ -105,7 +105,7 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         bx, by, bw, bh = convert_to_yolo_bbox(cx, cy, cluster_w / 2, cluster_h / 2, img_shape[1], img_shape[0])
         labels.append((PORE_NEST_CLASS_ID, bx, by, bw, bh))
 
-    # ---------- Scattered Pores ----------
+    # ---------- Scattered Pores (With Improved Overlap Prevention) ----------
     scatter_success, total_scatter_attempts = 0, 0
     max_total_scatter_attempts = scattered_pore_count * max_attempts
 
@@ -113,7 +113,9 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         total_scatter_attempts += 1
         x, y = random.randint(x_min, x_max), random.randint(y_min, y_max)
         w, h, angle = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(0, 180)
-        if is_point_inside_polygon((x, y), polygon) and is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_SCATTERED_PORES):
+        
+        # ✅ Check distance with buffer to avoid overlap with clustered pores
+        if is_point_inside_polygon((x, y), polygon) and is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_SCATTERED_PORES + MAX_PORE_RADIUS):
             pores.append((x, y, w, h, angle))
             padded_w = w + PORE_PADDING
             padded_h = h + PORE_PADDING
