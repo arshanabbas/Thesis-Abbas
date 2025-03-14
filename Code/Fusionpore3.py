@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import random
 
 # Define colors and pore parameters
-CLASS_2_COLOR = (0, 0, 255)  # Blue for Class 2 outline
-PORE_COLOR = (0, 0, 255)  # Blue outline for pores
+CLASS_2_COLOR = (0, 0, 0)  # Blue for Class 2 outline
+PORE_COLOR = (0, 0, 0)  # Blue outline for pores
 
 CIRCLE_THICKNESS = 1  # Thin outline
 MIN_PORE_RADIUS = 2  # Minimum pore size
@@ -73,8 +73,8 @@ def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
                 class_id = int(parts[0])
                 polygon = list(map(float, parts[1:]))
 
-                # Only process Class 2 (Nebenbereich)
-                if class_id != 2:
+                # Only process Class 3 
+                if class_id != 3:
                     continue
 
                 # Normalize and map coordinates to image dimensions
@@ -83,7 +83,7 @@ def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
                 points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
 
                 # Draw polygon outline instead of filling
-                cv2.polylines(image, [points], isClosed=True, color=CLASS_2_COLOR, thickness=1)
+                cv2.polylines(image, [points], isClosed=True, color=CLASS_2_COLOR, thickness=2)
 
                 # Draw class ID at the first point
                 cv2.putText(image, "2", tuple(points[0][0]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)

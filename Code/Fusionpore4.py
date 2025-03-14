@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import random
 
 # Define colors and pore parameters
-CLASS_2_COLOR = (0, 0, 255)  # Blue for Class 2 outline
-PORE_COLOR = (0, 0, 255)  # Blue outline for pores
+CLASS_3_COLOR = (0, 0, 0)  # Black for Class 3 outline
+PORE_COLOR = (0, 0, 0)  # Black outline for pores
 
 CIRCLE_THICKNESS = 1  # Thin outline
 MIN_PORE_RADIUS = 2  # Minimum pore size
@@ -27,7 +27,7 @@ def is_point_inside_polygon(point, polygon):
 def polygon_area(polygon):
     return 0.5 * abs(np.dot(polygon[:, 0], np.roll(polygon[:, 1], 1)) - np.dot(polygon[:, 1], np.roll(polygon[:, 0], 1)))
 
-# Function to generate pores across the whole Nebenbereich with small clusters and scattered pores, avoiding overlap
+# Function to generate pores across the whole region with clusters and scattered pores
 def generate_balanced_pores(polygon, img_shape):
     pores = []
     polygon = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))  # Ensure correct format
@@ -87,8 +87,8 @@ def generate_balanced_pores(polygon, img_shape):
     
     return pores
 
-# Visualization
-def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
+# Visualization (adjusted to Class 3 only)
+def visualize_class3_segmentation(image_dir, annotation_dir, output_dir=None):
     os.makedirs(output_dir, exist_ok=True) if output_dir else None
 
     for annotation_file in os.listdir(annotation_dir):
@@ -114,8 +114,8 @@ def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
                 class_id = int(parts[0])
                 polygon = list(map(float, parts[1:]))
 
-                # Only process Class 2 (Nebenbereich)
-                if class_id != 2:
+                # ✅ Only process Class 3 now
+                if class_id != 3:
                     continue
 
                 # Normalize and map coordinates to image dimensions
@@ -124,7 +124,7 @@ def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
                 points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
 
                 # Draw polygon outline instead of filling
-                cv2.polylines(image, [points], isClosed=True, color=CLASS_2_COLOR, thickness=1)
+                cv2.polylines(image, [points], isClosed=True, color=CLASS_3_COLOR, thickness=1)
 
                 # Generate realistic, irregular pores across the full region
                 pores = generate_balanced_pores(points, image.shape)
@@ -151,4 +151,4 @@ image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOL
 annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8"
 output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore5"
 
-visualize_class2_segmentation(image_dir, annotation_dir, output_dir)
+visualize_class3_segmentation(image_dir, annotation_dir, output_dir)
