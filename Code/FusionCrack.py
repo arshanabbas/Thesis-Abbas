@@ -6,7 +6,7 @@ import random
 import math
 
 # Color and thickness
-CLASS_3_COLOR = (0, 0, 0)  # Black for Class 3 outline
+CLASS_3_COLOR = (128,128,128)  # Black for Class 3 outline
 CRACK_COLOR = (0, 0, 0)    # Black for cracks
 CRACK_THICKNESS = 1        # Thin cracks
 
@@ -93,7 +93,7 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
                 points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
 
                 # Draw polygon outline
-                cv2.polylines(image, [points], isClosed=True, color=CLASS_3_COLOR, thickness=1)
+                cv2.polylines(image, [points], isClosed=True, color=CLASS_3_COLOR, thickness=2)
 
                 # Generate cracks
                 for _ in range(NUM_CRACKS):
