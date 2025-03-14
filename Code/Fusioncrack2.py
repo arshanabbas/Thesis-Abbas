@@ -6,18 +6,18 @@ import random
 import math
 
 # Define colors and parameters
-CLASS_3_COLOR = (0, 0, 0)  # Black outline for Class 3
+CLASS_3_COLOR = (128,128,128)  # Black outline for Class 3
 CRACK_COLOR = (0, 0, 0)  # Black cracks
 CRACK_THICKNESS = 1  # Thin crack line
 
 # Crack generation parameters
 STEP_SIZE = 7  # Length of each crack segment
 ANGLE_VARIATION = 40  # Angle deviation for crack direction
-MAX_BRANCH_DEPTH = 2  # How many times cracks can branch
-BRANCH_PROBABILITY = 0.3  # Probability of branching
-NUM_CRACKS = 5  # Number of cracks per polygon
-MIN_CRACK_LENGTH = 30  # Min crack length
-MAX_CRACK_LENGTH = 60  # Max crack length
+MAX_BRANCH_DEPTH = 3  # How many times cracks can branch
+BRANCH_PROBABILITY = 0.2  # Probability of branching
+NUM_CRACKS = 3  # Number of cracks per polygon
+MIN_CRACK_LENGTH = 10  # Min crack length
+MAX_CRACK_LENGTH = 20  # Max crack length
 
 
 # Function to check if a point is inside a polygon
@@ -110,7 +110,7 @@ def visualize_class3_with_branching_cracks(image_dir, annotation_dir, output_dir
                 points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
 
                 # Draw Class 3 polygon outline
-                cv2.polylines(image, [points], isClosed=True, color=CLASS_3_COLOR, thickness=1)
+                cv2.polylines(image, [points], isClosed=True, color=CLASS_3_COLOR, thickness=2)
 
                 # Generate branching cracks inside polygon
                 generate_cracks_in_polygon(image, points, num_cracks=NUM_CRACKS)
