@@ -3,11 +3,11 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Define color for Class 2 (Blue)
-CLASS_2_COLOR = (0, 0, 255)  # Blue for Class 2
+# Define color for Class 3 (Gray for Class 3)
+CLASS_3_COLOR = (128, 128, 128)  # Gray
 
 # Visualization
-def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
+def visualize_class3_segmentation(image_dir, annotation_dir, output_dir=None):
     os.makedirs(output_dir, exist_ok=True) if output_dir else None
 
     for annotation_file in os.listdir(annotation_dir):
@@ -33,8 +33,8 @@ def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
                 class_id = int(parts[0])
                 polygon = list(map(float, parts[1:]))
 
-                # Only process Class 2 (Nebenbereich)
-                if class_id != 2:
+                # Only process Class 3
+                if class_id != 3:
                     continue
 
                 # Normalize and map coordinates to image dimensions
@@ -42,11 +42,11 @@ def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
                           for i in range(0, len(polygon), 2)]
                 points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
 
-                # Draw polygon outline instead of filling
-                cv2.polylines(image, [points], isClosed=True, color=CLASS_2_COLOR, thickness=1)
+                # Draw polygon outline with thicker gray/black line
+                cv2.polylines(image, [points], isClosed=True, color=CLASS_3_COLOR, thickness=2)
 
                 # Draw class ID at the first point
-                cv2.putText(image, "2", tuple(points[0][0]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(image, "3", tuple(points[0][0]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
         # Plot
         fig, ax = plt.subplots(figsize=(10, 10))
@@ -66,4 +66,4 @@ image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOL
 annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8"
 output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/visualisation" 
 
-visualize_class2_segmentation(image_dir, annotation_dir, output_dir)
+visualize_class3_segmentation(image_dir, annotation_dir, output_dir)
