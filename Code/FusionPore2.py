@@ -4,14 +4,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 
-# Define colors and pore parameters
-CLASS_2_COLOR = (0, 0, 0)  # Blue for Class 2 outline
-PORE_COLOR = (0, 0, 0)  # Blue outline for pores
-
-CIRCLE_THICKNESS = 1  # Thin outline
-MIN_PORE_RADIUS = 2  # Minimum pore size
-MAX_PORE_RADIUS = 5  # Maximum pore size
-PORE_DENSITY = 0.02  # Percentage of the polygon area covered by pores
+# Define color
+CLASS_2_COLOR = (0, 0, 0)  
+CIRCLE_THICKNESS = 1  
+MIN_PORE_RADIUS = 2  
+MAX_PORE_RADIUS = 5  
+PORE_DENSITY = 0.02  
 
 # Function to check if a point is inside a polygon
 def is_point_inside_polygon(point, polygon):
@@ -111,7 +109,7 @@ def visualize_class2_segmentation(image_dir, annotation_dir, output_dir=None):
         else:
             plt.show()
 
-# Example usage
+# Usage
 image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images"
 annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8"
 output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore2"
