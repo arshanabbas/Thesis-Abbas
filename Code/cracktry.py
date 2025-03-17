@@ -6,35 +6,39 @@ import random
 import math
 
 # Color and thickness
-CLASS_3_COLOR = (128,128,128)  # Black for Class 3 outline
-CRACK_COLOR = (0, 0, 0)    # Black for cracks
-CRACK_THICKNESS = 1        # Thin cracks
+CLASS_3_COLOR = (128, 128, 128)  # Gray outline for Class 3
+CRACK_COLOR = (0, 0, 0)          # Black for cracks
+CRACK_THICKNESS = 1              # Thin cracks
 
 # Crack parameters
 MIN_CRACK_LENGTH = 30  # Min number of steps
 MAX_CRACK_LENGTH = 80  # Max number of steps
-STEP_SIZE = 5  # Length of each segment
-ANGLE_VARIATION = 30  # Max deviation in angle (degrees)
-NUM_CRACKS = 5  # Number of cracks per polygon
+STEP_SIZE = 5          # Length of each segment
+ANGLE_VARIATION = 30   # Max deviation in angle (degrees)
+NUM_CRACKS = 5         # Number of cracks per polygon
 
 # Function to check if a point is inside a polygon
 def is_point_inside_polygon(point, polygon):
     polygon = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
     return cv2.pointPolygonTest(polygon, point, False) >= 0
 
-# Function to generate a random crack inside polygon
+# Function to get a random point on the polygon's edge
+def get_random_point_on_edge(polygon):
+    polygon = polygon.reshape((-1, 2))  # Simplify shape
+    idx = random.randint(0, len(polygon) - 1)
+    pt1 = polygon[idx]
+    pt2 = polygon[(idx + 1) % len(polygon)]  # Wrap around
+    t = random.random()  # Random fraction along edge
+    x = int(pt1[0] * (1 - t) + pt2[0] * t)
+    y = int(pt1[1] * (1 - t) + pt2[1] * t)
+    return x, y
+
+# Function to generate a random crack starting from edge
 def generate_random_crack(polygon):
-    x_min, y_min = np.min(polygon, axis=0)[0]
-    x_max, y_max = np.max(polygon, axis=0)[0]
+    # Start from edge
+    start_x, start_y = get_random_point_on_edge(polygon)
 
-    # Find random starting point inside polygon
-    while True:
-        start_x = random.randint(x_min, x_max)
-        start_y = random.randint(y_min, y_max)
-        if is_point_inside_polygon((start_x, start_y), polygon):
-            break
-
-    # Initial random direction
+    # Random initial direction
     angle = random.uniform(0, 360)
     crack_points = [(start_x, start_y)]
 
@@ -42,7 +46,7 @@ def generate_random_crack(polygon):
     length = random.randint(MIN_CRACK_LENGTH, MAX_CRACK_LENGTH)
 
     for _ in range(length):
-        angle += random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)  # Add some randomness to direction
+        angle += random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)  # Random angle adjustment
         dx = STEP_SIZE * math.cos(math.radians(angle))
         dy = STEP_SIZE * math.sin(math.radians(angle))
         new_x = int(crack_points[-1][0] + dx)
@@ -58,7 +62,8 @@ def generate_random_crack(polygon):
 
 # Main visualization function
 def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
-    os.makedirs(output_dir, exist_ok=True) if output_dir else None
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
 
     for annotation_file in os.listdir(annotation_dir):
         if not annotation_file.endswith(".txt"):
@@ -83,31 +88,30 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
                 class_id = int(parts[0])
                 polygon = list(map(float, parts[1:]))
 
-                # Only process Class 3
+                # Process only Class 3
                 if class_id != 3:
                     continue
 
-                # Normalize and map coordinates to image dimensions
+                # Convert normalized points to image dimensions
                 points = [(int(polygon[i] * image.shape[1]), int(polygon[i + 1] * image.shape[0]))
                           for i in range(0, len(polygon), 2)]
-                points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
+                points_np = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
 
                 # Draw polygon outline
-                cv2.polylines(image, [points], isClosed=True, color=CLASS_3_COLOR, thickness=2)
+                cv2.polylines(image, [points_np], isClosed=True, color=CLASS_3_COLOR, thickness=2)
 
                 # Generate cracks
                 for _ in range(NUM_CRACKS):
-                    crack = generate_random_crack(points)
+                    crack = generate_random_crack(points_np)
                     if len(crack) > 1:
                         for i in range(len(crack) - 1):
                             cv2.line(image, crack[i], crack[i + 1], CRACK_COLOR, thickness=CRACK_THICKNESS)
 
-        # Plot
+        # Plot and save or display
         fig, ax = plt.subplots(figsize=(10, 10))
         ax.imshow(image)
         ax.axis('off')
 
-        # Save output
         if output_dir:
             output_path = os.path.join(output_dir, image_name)
             plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
