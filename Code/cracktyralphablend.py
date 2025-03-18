@@ -13,11 +13,11 @@ CRACK_COLOR = (0, 0, 0)          # Black for cracks (without alpha here)
 CRACK_THICKNESS = 2              # Base thickness of cracks (keep thin for realism)
 
 # Crack parameters
-MIN_CRACK_LENGTH = 30
-MAX_CRACK_LENGTH = 80
+MIN_CRACK_LENGTH = 70
+MAX_CRACK_LENGTH = 90
 STEP_SIZE = 5
 ANGLE_VARIATION = 30
-NUM_CRACKS = 5  # Cracks per polygon
+NUM_CRACKS = 1  # Cracks per polygon
 
 # --------------------- HELPER FUNCTIONS -----------------------
 
@@ -140,7 +140,7 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
 # Replace with your actual paths
 image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images"
 annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8"
-output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/Randomwalk_cracks"
+output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/Randomwalk_alpha"
 
 # Run
 visualize_class3_with_cracks(image_dir, annotation_dir, output_dir)
