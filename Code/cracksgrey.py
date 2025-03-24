@@ -8,16 +8,18 @@ import math
 # --------------------- CONFIGURATION -----------------------
 
 CLASS_3_COLOR = (128, 128, 128)  # Gray outline for Class 3
-CRACK_COLOR = (0, 0, 0)          # Black for cracks
-CRACK_THICKNESS = 2              # Crack thickness
+CRACK_CORE_COLOR = (128, 128, 128)  # Normal grey crack color
+CRACK_EDGE_COLOR = (180, 180, 180)  # Light grey edges
+CRACK_THICKNESS = 2  # Core thickness
+CRACK_EDGE_THICKNESS = CRACK_THICKNESS + 2  # Edge thickness (slightly bigger)
 
 # Crack parameters
-MIN_CRACK_LENGTH = 60
+MIN_CRACK_LENGTH = 50
 MAX_CRACK_LENGTH = 80
 STEP_SIZE = 5
 ANGLE_VARIATION = 15
-MIN_CRACKS = 2  # Ensure at least one crack
-MAX_CRACKS = 2  # Maximum cracks
+MIN_CRACKS = 1
+MAX_CRACKS = 3
 
 # --------------------- HELPER FUNCTIONS -----------------------
 
@@ -41,38 +43,23 @@ def get_polygon_center(polygon):
     center_y = int(np.mean(polygon[:, 1]))
     return center_x, center_y
 
-def is_overlapping(new_crack, existing_cracks, min_distance=5):
-    """Check if a new crack overlaps with existing ones."""
-    for crack in existing_cracks:
-        for (x1, y1) in crack:
-            for (x2, y2) in new_crack:
-                if abs(x1 - x2) < min_distance and abs(y1 - y2) < min_distance:
-                    return True  # Too close to an existing crack
-    return False
-
-def generate_random_crack(polygon, existing_cracks, force_generate=False):
-    """Generates a crack that moves towards the center. If force_generate is True, ensures at least one crack."""
-    
+def generate_random_crack(polygon, existing_cracks):
     start_x, start_y = get_random_point_on_edge(polygon)
     center_x, center_y = get_polygon_center(polygon)
-    
-    angle = math.degrees(math.atan2(center_y - start_y, center_x - start_x))  # Aim at center
+
+    angle = math.degrees(math.atan2(center_y - start_x, center_x - start_y))  # Aim at center
     crack_points = [(start_x, start_y)]
     length = random.randint(MIN_CRACK_LENGTH, MAX_CRACK_LENGTH)
 
     for _ in range(length):
-        angle += random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)  # Add slight randomness
+        angle += random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)
         dx = STEP_SIZE * math.cos(math.radians(angle))
         dy = STEP_SIZE * math.sin(math.radians(angle))
         new_x = int(crack_points[-1][0] + dx)
         new_y = int(crack_points[-1][1] + dy)
 
         if not is_point_inside_polygon((new_x, new_y), polygon):
-            break  # Stop if out of bounds
-
-        new_crack = crack_points + [(new_x, new_y)]
-        if is_overlapping(new_crack, existing_cracks) and not force_generate:
-            break  # Prevent overlapping cracks unless forced
+            break
 
         crack_points.append((new_x, new_y))
 
@@ -100,7 +87,7 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         overlay = np.zeros((image.shape[0], image.shape[1], 4), dtype=np.uint8)
-        existing_cracks = []  # Store generated cracks to prevent overlaps
+        existing_cracks = []
 
         with open(annotation_path, 'r') as f:
             for line in f:
@@ -117,10 +104,10 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
 
                 cv2.polylines(image, [points_np], isClosed=True, color=CLASS_3_COLOR, thickness=2)
 
-                # --------------------- ENSURE AT LEAST 1 CRACK -----------------------
+                # Ensure 1 to 3 cracks
                 num_cracks = random.randint(MIN_CRACKS, MAX_CRACKS)
                 generated_cracks = 0
-                retries = 10  # Max attempts to generate cracks
+                retries = 10  # Prevent infinite loops
 
                 while generated_cracks < num_cracks and retries > 0:
                     crack = generate_random_crack(points_np, existing_cracks)
@@ -128,24 +115,35 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
                         existing_cracks.append(crack)
                         generated_cracks += 1
                         total_segments = len(crack) - 1
+
                         for i in range(total_segments):
                             progress = i / total_segments
                             alpha_value = int(255 * (1 - progress))  # Smooth fade
-                            color_with_alpha = CRACK_COLOR + (alpha_value,)
-                            cv2.line(overlay, crack[i], crack[i + 1], color_with_alpha, thickness=CRACK_THICKNESS)
+
+                            # **Draw crack edges first (light grey, slightly thicker)**
+                            cv2.line(overlay, crack[i], crack[i + 1], CRACK_EDGE_COLOR + (alpha_value,),
+                                     thickness=CRACK_EDGE_THICKNESS)
+
+                            # **Draw crack core second (normal grey, same thickness)**
+                            cv2.line(overlay, crack[i], crack[i + 1], CRACK_CORE_COLOR + (alpha_value,),
+                                     thickness=CRACK_THICKNESS)
+
                     retries -= 1
 
-                # If no cracks were generated, forcefully add one
+                # If no cracks were generated, force one
                 if generated_cracks == 0:
-                    crack = generate_random_crack(points_np, existing_cracks, force_generate=True)
+                    crack = generate_random_crack(points_np, existing_cracks)
                     if crack:
                         existing_cracks.append(crack)
                         total_segments = len(crack) - 1
                         for i in range(total_segments):
                             progress = i / total_segments
                             alpha_value = int(255 * (1 - progress))
-                            color_with_alpha = CRACK_COLOR + (alpha_value,)
-                            cv2.line(overlay, crack[i], crack[i + 1], color_with_alpha, thickness=CRACK_THICKNESS)
+
+                            cv2.line(overlay, crack[i], crack[i + 1], CRACK_EDGE_COLOR + (alpha_value,),
+                                     thickness=CRACK_EDGE_THICKNESS)
+                            cv2.line(overlay, crack[i], crack[i + 1], CRACK_CORE_COLOR + (alpha_value,),
+                                     thickness=CRACK_THICKNESS)
 
         def blend_overlay(base_image, overlay):
             alpha = overlay[:, :, 3] / 255.0
