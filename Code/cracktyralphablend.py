@@ -7,17 +7,22 @@ import math
 
 # --------------------- CONFIGURATION -----------------------
 
-CLASS_3_COLOR = (128, 128, 128)  # Gray outline for Class 3
-CRACK_COLOR = (0, 0, 0)          # Black for cracks
-CRACK_THICKNESS = 2              # Crack thickness
+CLASS_3_COLOR = (128, 128, 128)
+CRACK_COLOR = (0, 0, 0)
+CRACK_THICKNESS = 2
 
 # Crack parameters
 MIN_CRACK_LENGTH = 60
 MAX_CRACK_LENGTH = 80
 STEP_SIZE = 5
 ANGLE_VARIATION = 15
-MIN_CRACKS = 2  # Ensure at least one crack
-MAX_CRACKS = 2  # Maximum cracks
+MIN_CRACKS = 2
+MAX_CRACKS = 2
+
+# YOLOv11 Format Output
+YOLO_CLASS_ID = 0
+save_yolo_labels = True
+yolo_label_output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/crack_yolo_labels"
 
 # --------------------- HELPER FUNCTIONS -----------------------
 
@@ -35,6 +40,28 @@ def get_random_point_on_edge(polygon):
     y = int(pt1[1] * (1 - t) + pt2[1] * t)
     return x, y
 
+def get_random_point_on_named_edge(polygon, edge_name):
+    polygon = polygon.reshape((-1, 2))
+    x_min, y_min = np.min(polygon, axis=0)
+    x_max, y_max = np.max(polygon, axis=0)
+
+    if edge_name == "north":
+        y = y_min
+        x = random.randint(x_min, x_max)
+    elif edge_name == "south":
+        y = y_max
+        x = random.randint(x_min, x_max)
+    elif edge_name == "west":
+        x = x_min
+        y = random.randint(y_min, y_max)
+    elif edge_name == "east":
+        x = x_max
+        y = random.randint(y_min, y_max)
+    else:
+        return get_random_point_on_edge(polygon)
+
+    return x, y
+
 def get_polygon_center(polygon):
     polygon = polygon.reshape((-1, 2))
     center_x = int(np.mean(polygon[:, 0]))
@@ -42,47 +69,76 @@ def get_polygon_center(polygon):
     return center_x, center_y
 
 def is_overlapping(new_crack, existing_cracks, min_distance=5):
-    """Check if a new crack overlaps with existing ones."""
     for crack in existing_cracks:
         for (x1, y1) in crack:
             for (x2, y2) in new_crack:
                 if abs(x1 - x2) < min_distance and abs(y1 - y2) < min_distance:
-                    return True  # Too close to an existing crack
+                    return True
     return False
 
-def generate_random_crack(polygon, existing_cracks, force_generate=False):
-    """Generates a crack that moves towards the center. If force_generate is True, ensures at least one crack."""
-    
-    start_x, start_y = get_random_point_on_edge(polygon)
-    center_x, center_y = get_polygon_center(polygon)
-    
-    angle = math.degrees(math.atan2(center_y - start_y, center_x - start_x))  # Aim at center
-    crack_points = [(start_x, start_y)]
-    length = random.randint(MIN_CRACK_LENGTH, MAX_CRACK_LENGTH)
+def generate_random_crack(polygon, existing_cracks, edge_name=None, force_generate=False):
+    max_attempts = 30
+    attempt = 0
 
-    for _ in range(length):
-        angle += random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)  # Add slight randomness
-        dx = STEP_SIZE * math.cos(math.radians(angle))
-        dy = STEP_SIZE * math.sin(math.radians(angle))
-        new_x = int(crack_points[-1][0] + dx)
-        new_y = int(crack_points[-1][1] + dy)
+    while attempt < max_attempts:
+        if edge_name:
+            start_x, start_y = get_random_point_on_named_edge(polygon, edge_name)
+        else:
+            start_x, start_y = get_random_point_on_edge(polygon)
 
-        if not is_point_inside_polygon((new_x, new_y), polygon):
-            break  # Stop if out of bounds
+        center_x, center_y = get_polygon_center(polygon)
+        angle = math.degrees(math.atan2(center_y - start_y, center_x - start_x))
+        crack_points = [(start_x, start_y)]
+        length = random.randint(MIN_CRACK_LENGTH, MAX_CRACK_LENGTH)
 
-        new_crack = crack_points + [(new_x, new_y)]
-        if is_overlapping(new_crack, existing_cracks) and not force_generate:
-            break  # Prevent overlapping cracks unless forced
+        for _ in range(length):
+            angle += random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)
+            dx = STEP_SIZE * math.cos(math.radians(angle))
+            dy = STEP_SIZE * math.sin(math.radians(angle))
+            new_x = int(crack_points[-1][0] + dx)
+            new_y = int(crack_points[-1][1] + dy)
 
-        crack_points.append((new_x, new_y))
+            if not is_point_inside_polygon((new_x, new_y), polygon):
+                break
 
-    return crack_points if len(crack_points) > 1 else None  # Ensure valid crack
+            new_crack = crack_points + [(new_x, new_y)]
+            if is_overlapping(new_crack, existing_cracks) and not force_generate:
+                break
+
+            crack_points.append((new_x, new_y))
+
+        if len(crack_points) >= MIN_CRACK_LENGTH:
+            return crack_points
+
+        attempt += 1
+
+    if force_generate and len(crack_points) > 1:
+        return crack_points
+    return None
+
+def save_crack_bounding_box(crack_points, image_shape, label_path):
+    crack_points = np.array(crack_points)
+    x_min = np.min(crack_points[:, 0])
+    y_min = np.min(crack_points[:, 1])
+    x_max = np.max(crack_points[:, 0])
+    y_max = np.max(crack_points[:, 1])
+
+    # Normalize
+    x_center = (x_min + x_max) / 2 / image_shape[1]
+    y_center = (y_min + y_max) / 2 / image_shape[0]
+    width = (x_max - x_min) / image_shape[1]
+    height = (y_max - y_min) / image_shape[0]
+
+    with open(label_path, "a") as f:
+        f.write(f"{YOLO_CLASS_ID} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
 
 # --------------------- MAIN FUNCTION -----------------------
 
 def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
+    if save_yolo_labels:
+        os.makedirs(yolo_label_output_dir, exist_ok=True)
 
     for annotation_file in os.listdir(annotation_dir):
         if not annotation_file.endswith(".txt"):
@@ -100,7 +156,7 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         overlay = np.zeros((image.shape[0], image.shape[1], 4), dtype=np.uint8)
-        existing_cracks = []  # Store generated cracks to prevent overlaps
+        existing_cracks = []
 
         with open(annotation_path, 'r') as f:
             for line in f:
@@ -117,35 +173,49 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
 
                 cv2.polylines(image, [points_np], isClosed=True, color=CLASS_3_COLOR, thickness=2)
 
-                # --------------------- ENSURE AT LEAST 1 CRACK -----------------------
-                num_cracks = random.randint(MIN_CRACKS, MAX_CRACKS)
                 generated_cracks = 0
-                retries = 10  # Max attempts to generate cracks
+                available_edges = ["north", "south", "east", "west"]
+                random.shuffle(available_edges)
+                attempts = 0
 
-                while generated_cracks < num_cracks and retries > 0:
-                    crack = generate_random_crack(points_np, existing_cracks)
+                while generated_cracks < MIN_CRACKS and attempts < 100:
+                    edge = available_edges[generated_cracks % 4]
+                    crack = generate_random_crack(points_np, existing_cracks, edge_name=edge)
+
                     if crack:
                         existing_cracks.append(crack)
                         generated_cracks += 1
-                        total_segments = len(crack) - 1
-                        for i in range(total_segments):
-                            progress = i / total_segments
-                            alpha_value = int(255 * (1 - progress))  # Smooth fade
-                            color_with_alpha = CRACK_COLOR + (alpha_value,)
-                            cv2.line(overlay, crack[i], crack[i + 1], color_with_alpha, thickness=CRACK_THICKNESS)
-                    retries -= 1
 
-                # If no cracks were generated, forcefully add one
-                if generated_cracks == 0:
-                    crack = generate_random_crack(points_np, existing_cracks, force_generate=True)
-                    if crack:
-                        existing_cracks.append(crack)
+                        # Draw and save bbox
                         total_segments = len(crack) - 1
                         for i in range(total_segments):
                             progress = i / total_segments
                             alpha_value = int(255 * (1 - progress))
                             color_with_alpha = CRACK_COLOR + (alpha_value,)
                             cv2.line(overlay, crack[i], crack[i + 1], color_with_alpha, thickness=CRACK_THICKNESS)
+
+                        if save_yolo_labels:
+                            label_path = os.path.join(yolo_label_output_dir, f"{os.path.splitext(image_name)[0]}.txt")
+                            save_crack_bounding_box(crack, image.shape, label_path)
+
+                    attempts += 1
+
+                while generated_cracks < MIN_CRACKS:
+                    crack = generate_random_crack(points_np, existing_cracks, force_generate=True)
+                    if crack:
+                        existing_cracks.append(crack)
+                        generated_cracks += 1
+
+                        total_segments = len(crack) - 1
+                        for i in range(total_segments):
+                            progress = i / total_segments
+                            alpha_value = int(255 * (1 - progress))
+                            color_with_alpha = CRACK_COLOR + (alpha_value,)
+                            cv2.line(overlay, crack[i], crack[i + 1], color_with_alpha, thickness=CRACK_THICKNESS)
+
+                        if save_yolo_labels:
+                            label_path = os.path.join(yolo_label_output_dir, f"{os.path.splitext(image_name)[0]}.txt")
+                            save_crack_bounding_box(crack, image.shape, label_path)
 
         def blend_overlay(base_image, overlay):
             alpha = overlay[:, :, 3] / 255.0
