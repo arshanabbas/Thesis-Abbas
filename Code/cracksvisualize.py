@@ -12,9 +12,7 @@ os.makedirs(output_dir, exist_ok=True)
 
 # Class color mapping (BGR)
 CLASS_COLORS = {
-    0: (0, 0, 0),         # Crack - Black
-    1: (255, 0, 0),       # Optional: Red
-    2: (0, 255, 0),       # Optional: Green
+    0: (64, 64, 64),         # Crack - Black
 }
 
 # -------------------- MAIN --------------------
