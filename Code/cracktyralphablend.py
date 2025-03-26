@@ -116,14 +116,21 @@ def generate_random_crack(polygon, existing_cracks, edge_name=None, force_genera
         return crack_points
     return None
 
-def save_crack_bounding_box(crack_points, image_shape, label_path):
+def save_crack_bounding_box(crack_points, image_shape, label_path, padding=5):
+    
     crack_points = np.array(crack_points)
-    x_min = np.min(crack_points[:, 0])
-    y_min = np.min(crack_points[:, 1])
-    x_max = np.max(crack_points[:, 0])
-    y_max = np.max(crack_points[:, 1])
+    x_min = np.min(crack_points[:, 0]) - padding
+    y_min = np.min(crack_points[:, 1]) - padding
+    x_max = np.max(crack_points[:, 0]) + padding
+    y_max = np.max(crack_points[:, 1]) + padding
 
-    # Normalize
+    # Ensure bounding box stays within image boundaries
+    x_min = max(0, x_min)
+    y_min = max(0, y_min)
+    x_max = min(image_shape[1], x_max)
+    y_max = min(image_shape[0], y_max)
+
+    # Normalize for YOLO format
     x_center = (x_min + x_max) / 2 / image_shape[1]
     y_center = (y_min + y_max) / 2 / image_shape[0]
     width = (x_max - x_min) / image_shape[1]
