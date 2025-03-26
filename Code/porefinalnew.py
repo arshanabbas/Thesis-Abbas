@@ -40,6 +40,12 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
             return False
     return True
 
+def is_far_enough(nx, ny, nr, existing, min_dist):
+    for (x, y, w, h, _) in existing:
+        if np.linalg.norm(np.array([nx, ny]) - np.array([x, y])) < (max(w, h) + nr + min_dist):
+            return False
+    return True
+
 def draw_pore(image, x, y, w, h, angle):
     """
     Draws a pore using cv2.circle for small radii (1 or 2) and cv2.ellipse for larger radii (3-5).
@@ -63,25 +69,14 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
             cluster_centers.append((cx, cy))
     
     num_pores = random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES)
-    cluster_pore_positions = [[] for _ in range(num_clusters)]
     for _ in range(num_pores):
-        cluster_idx = random.randint(0, num_clusters - 1)
-        cx, cy = cluster_centers[cluster_idx]
+        cx, cy = random.choice(cluster_centers)
         angle = random.randint(0, 180)
         w, h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
-        x = cx + random.randint(-10, 10)
-        y = cy + random.randint(-10, 10)
+        x, y = cx + random.randint(-10, 10), cy + random.randint(-10, 10)
         
-        if is_point_inside_polygon((x, y), polygon):
+        if is_point_inside_polygon((x, y), polygon) and is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_SCATTERED_PORES):
             pores.append((x, y, w, h, angle))
-            cluster_pore_positions[cluster_idx].append((x, y, w, h))
-    
-    for cluster_pores in cluster_pore_positions:
-        if not cluster_pores:
-            continue
-        xs, ys, ws, hs = zip(*cluster_pores)
-        bx, by, bw, bh = convert_to_yolo_bbox(sum(xs)/len(xs), sum(ys)/len(ys), max(ws), max(hs), img_shape[1], img_shape[0])
-        labels.append((PORE_NEST_CLASS_ID, bx, by, bw, bh))
     
     return pores, labels
 
@@ -115,7 +110,7 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
                 pores, labels = generate_balanced_pores_with_labels(points, image.shape)
                 label_list.extend(labels)
                 for (x, y, w, h, angle) in pores:
-                    draw_pore(image, x, y, w, h, angle)  # Use the new function
+                    draw_pore(image, x, y, w, h, angle)
 
         cv2.imwrite(os.path.join(output_images_dir, image_name), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
         if label_list:
@@ -125,6 +120,6 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
 # Example usage
 image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images"
 annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8"
-output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/porefinal"
+output_images_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/porefinal"
 output_labels_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/poreannotations"
 visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, output_labels_dir)
