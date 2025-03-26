@@ -22,7 +22,7 @@ MAX_CRACKS = 2
 # YOLOv11 Format Output
 YOLO_CLASS_ID = 0
 save_yolo_labels = True
-yolo_label_output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/crack_yolo_labels"
+yolo_label_output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/crack_dataset/testing"
 
 # --------------------- HELPER FUNCTIONS -----------------------
 
@@ -117,7 +117,7 @@ def generate_random_crack(polygon, existing_cracks, edge_name=None, force_genera
     return None
 
 def save_crack_bounding_box(crack_points, image_shape, label_path, padding=5):
-    
+
     crack_points = np.array(crack_points)
     x_min = np.min(crack_points[:, 0]) - padding
     y_min = np.min(crack_points[:, 1]) - padding
@@ -247,6 +247,6 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
 
 image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images"
 annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8"
-output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/cracksgrey"
+output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/crack_dataset/images"
 
 visualize_class3_with_cracks(image_dir, annotation_dir, output_dir)
