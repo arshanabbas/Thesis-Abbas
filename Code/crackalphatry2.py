@@ -46,16 +46,8 @@ def get_polygon_center(polygon):
     center_y = int(np.mean(polygon[:, 1]))
     return center_x, center_y
 
-def is_overlapping(new_crack, existing_cracks, min_distance=5):
-    for crack in existing_cracks:
-        for (x1, y1) in crack:
-            for (x2, y2) in new_crack:
-                if abs(x1 - x2) < min_distance and abs(y1 - y2) < min_distance:
-                    return True
-    return False
-
-def generate_random_crack(polygon, existing_cracks):
-    max_attempts = 30
+def generate_random_crack(polygon):
+    max_attempts = 50
     attempt = 0
 
     while attempt < max_attempts:
@@ -75,10 +67,6 @@ def generate_random_crack(polygon, existing_cracks):
             if not is_point_inside_polygon((new_x, new_y), polygon):
                 break
 
-            new_crack = crack_points + [(new_x, new_y)]
-            if is_overlapping(new_crack, existing_cracks):
-                break
-
             crack_points.append((new_x, new_y))
 
         if len(crack_points) >= MIN_CRACK_LENGTH:
@@ -88,25 +76,16 @@ def generate_random_crack(polygon, existing_cracks):
 
     return None
 
-def save_crack_bounding_box(existing_cracks, image_shape, label_path, padding=5):
-    """Saves a single YOLO label file with properly merged bounding boxes."""
+def save_crack_bounding_box(cracks, image_shape, label_path, padding=5):
+    """Saves bounding boxes for cracks in YOLO format."""
     with open(label_path, "w") as f:
-        for crack_points in existing_cracks:
-            crack_points = np.array(crack_points)
-            
-            # Bounding box with padding
-            x_min = np.min(crack_points[:, 0]) - padding
-            y_min = np.min(crack_points[:, 1]) - padding
-            x_max = np.max(crack_points[:, 0]) + padding
-            y_max = np.max(crack_points[:, 1]) + padding
+        for crack in cracks:
+            crack = np.array(crack)
+            x_min = max(0, np.min(crack[:, 0]) - padding)
+            y_min = max(0, np.min(crack[:, 1]) - padding)
+            x_max = min(image_shape[1], np.max(crack[:, 0]) + padding)
+            y_max = min(image_shape[0], np.max(crack[:, 1]) + padding)
 
-            # Ensure bounding box stays within image boundaries
-            x_min = max(0, x_min)
-            y_min = max(0, y_min)
-            x_max = min(image_shape[1], x_max)
-            y_max = min(image_shape[0], y_max)
-
-            # Normalize for YOLO format
             x_center = (x_min + x_max) / 2 / image_shape[1]
             y_center = (y_min + y_max) / 2 / image_shape[0]
             width = (x_max - x_min) / image_shape[1]
@@ -137,7 +116,6 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        overlay = np.zeros((image.shape[0], image.shape[1], 4), dtype=np.uint8)
         existing_cracks = []
 
         with open(annotation_path, 'r') as f:
@@ -156,9 +134,13 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
                 cv2.polylines(image, [points_np], isClosed=True, color=CLASS_3_COLOR, thickness=2)
 
                 while len(existing_cracks) < MIN_CRACKS:
-                    crack = generate_random_crack(points_np, existing_cracks)
+                    crack = generate_random_crack(points_np)
                     if crack:
                         existing_cracks.append(crack)
+
+        for crack in existing_cracks:
+            for i in range(len(crack) - 1):
+                cv2.line(image, crack[i], crack[i + 1], CRACK_COLOR, thickness=CRACK_THICKNESS)
 
         if save_yolo_labels:
             label_path = os.path.join(yolo_label_output_dir, f"{os.path.splitext(image_name)[0]}.txt")
