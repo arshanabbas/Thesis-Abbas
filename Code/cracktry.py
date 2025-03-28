@@ -7,68 +7,138 @@ import math
 
 # --------------------- CONFIGURATION -----------------------
 
-# Color and thickness
-CLASS_3_COLOR = (128, 128, 128)  # Gray outline for Class 3
-CRACK_COLOR = (0, 0, 0)          # Black for cracks
-CRACK_THICKNESS = 5              # Starting thickness of cracks (can be adjusted)
+CLASS_3_COLOR = (128, 128, 128)
+CRACK_COLOR = (0, 0, 0)
+CRACK_THICKNESS = 2
 
 # Crack parameters
-MIN_CRACK_LENGTH = 30  # Min number of steps
-MAX_CRACK_LENGTH = 80  # Max number of steps
-STEP_SIZE = 5          # Length of each segment
-ANGLE_VARIATION = 30   # Max deviation in angle (degrees)
-NUM_CRACKS = 5         # Number of cracks per polygon
+MIN_CRACK_LENGTH = 60
+MAX_CRACK_LENGTH = 80
+STEP_SIZE = 5
+ANGLE_VARIATION = 15
+MIN_CRACKS = 2
+MAX_CRACKS = 2
+
+# YOLOv11 Format Output
+YOLO_CLASS_ID = 0
+save_yolo_labels = False
+yolo_label_output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/crack_dataset/labels"
 
 # --------------------- HELPER FUNCTIONS -----------------------
 
-# Function to check if a point is inside a polygon
 def is_point_inside_polygon(point, polygon):
     polygon = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
     return cv2.pointPolygonTest(polygon, point, False) >= 0
 
-# Function to get a random point on the polygon's edge
 def get_random_point_on_edge(polygon):
-    polygon = polygon.reshape((-1, 2))  # Simplify shape
+    polygon = polygon.reshape((-1, 2))
     idx = random.randint(0, len(polygon) - 1)
     pt1 = polygon[idx]
-    pt2 = polygon[(idx + 1) % len(polygon)]  # Wrap around
-    t = random.random()  # Random fraction along edge
+    pt2 = polygon[(idx + 1) % len(polygon)]
+    t = random.random()
     x = int(pt1[0] * (1 - t) + pt2[0] * t)
     y = int(pt1[1] * (1 - t) + pt2[1] * t)
     return x, y
 
-# Function to generate a random crack starting from edge
-def generate_random_crack(polygon):
-    # Start from edge
-    start_x, start_y = get_random_point_on_edge(polygon)
+def get_random_point_on_named_edge(polygon, edge_name):
+    polygon = polygon.reshape((-1, 2))
+    x_min, y_min = np.min(polygon, axis=0)
+    x_max, y_max = np.max(polygon, axis=0)
 
-    # Random initial direction
-    angle = random.uniform(0, 360)
-    crack_points = [(start_x, start_y)]
+    if edge_name == "north":
+        y = y_min
+        x = random.randint(x_min, x_max)
+    elif edge_name == "south":
+        y = y_max
+        x = random.randint(x_min, x_max)
+    elif edge_name == "west":
+        x = x_min
+        y = random.randint(y_min, y_max)
+    elif edge_name == "east":
+        x = x_max
+        y = random.randint(y_min, y_max)
+    else:
+        return get_random_point_on_edge(polygon)
 
-    # Random length
-    length = random.randint(MIN_CRACK_LENGTH, MAX_CRACK_LENGTH)
+    return x, y
 
-    for _ in range(length):
-        angle += random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)  # Random angle adjustment
-        dx = STEP_SIZE * math.cos(math.radians(angle))
-        dy = STEP_SIZE * math.sin(math.radians(angle))
-        new_x = int(crack_points[-1][0] + dx)
-        new_y = int(crack_points[-1][1] + dy)
+def get_polygon_center(polygon):
+    polygon = polygon.reshape((-1, 2))
+    center_x = int(np.mean(polygon[:, 0]))
+    center_y = int(np.mean(polygon[:, 1]))
+    return center_x, center_y
 
-        # Stop if out of polygon
-        if not is_point_inside_polygon((new_x, new_y), polygon):
-            break
+def is_overlapping(new_crack, existing_cracks, min_distance=5):
+    for crack in existing_cracks:
+        for (x1, y1) in crack:
+            for (x2, y2) in new_crack:
+                if abs(x1 - x2) < min_distance and abs(y1 - y2) < min_distance:
+                    return True
+    return False
 
-        crack_points.append((new_x, new_y))
+def generate_random_crack(polygon, existing_cracks, edge_name=None, force_generate=False):
+    max_attempts = 30
+    attempt = 0
 
-    return crack_points
+    while attempt < max_attempts:
+        if edge_name:
+            start_x, start_y = get_random_point_on_named_edge(polygon, edge_name)
+        else:
+            start_x, start_y = get_random_point_on_edge(polygon)
+
+        center_x, center_y = get_polygon_center(polygon)
+        angle = math.degrees(math.atan2(center_y - start_y, center_x - start_x))
+        crack_points = [(start_x, start_y)]
+        length = random.randint(MIN_CRACK_LENGTH, MAX_CRACK_LENGTH)
+
+        for _ in range(length):
+            angle += random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)
+            dx = STEP_SIZE * math.cos(math.radians(angle))
+            dy = STEP_SIZE * math.sin(math.radians(angle))
+            new_x = int(crack_points[-1][0] + dx)
+            new_y = int(crack_points[-1][1] + dy)
+
+            if not is_point_inside_polygon((new_x, new_y), polygon):
+                break
+
+            new_crack = crack_points + [(new_x, new_y)]
+            if is_overlapping(new_crack, existing_cracks) and not force_generate:
+                break
+
+            crack_points.append((new_x, new_y))
+
+        if len(crack_points) >= MIN_CRACK_LENGTH:
+            return crack_points
+
+        attempt += 1
+
+    if force_generate and len(crack_points) > 1:
+        return crack_points
+    return None
+
+def save_crack_bounding_box(crack_points, image_shape, label_path):
+    crack_points = np.array(crack_points)
+    x_min = np.min(crack_points[:, 0])
+    y_min = np.min(crack_points[:, 1])
+    x_max = np.max(crack_points[:, 0])
+    y_max = np.max(crack_points[:, 1])
+
+    # Normalize
+    x_center = (x_min + x_max) / 2 / image_shape[1]
+    y_center = (y_min + y_max) / 2 / image_shape[0]
+    width = (x_max - x_min) / image_shape[1]
+    height = (y_max - y_min) / image_shape[0]
+
+    with open(label_path, "a") as f:
+        f.write(f"{YOLO_CLASS_ID} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
 
 # --------------------- MAIN FUNCTION -----------------------
 
 def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
+    if save_yolo_labels:
+        os.makedirs(yolo_label_output_dir, exist_ok=True)
 
     for annotation_file in os.listdir(annotation_dir):
         if not annotation_file.endswith(".txt"):
@@ -82,49 +152,81 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
             print(f"Image {image_name} not found. Skipping...")
             continue
 
-        # Load image
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        # Parse annotation file
+        overlay = np.zeros((image.shape[0], image.shape[1], 4), dtype=np.uint8)
+        existing_cracks = []
+
         with open(annotation_path, 'r') as f:
             for line in f:
                 parts = line.strip().split()
                 class_id = int(parts[0])
                 polygon = list(map(float, parts[1:]))
 
-                # Process only Class 3
                 if class_id != 3:
                     continue
 
-                # Convert normalized points to image dimensions
                 points = [(int(polygon[i] * image.shape[1]), int(polygon[i + 1] * image.shape[0]))
                           for i in range(0, len(polygon), 2)]
                 points_np = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
 
-                # Draw polygon outline
                 cv2.polylines(image, [points_np], isClosed=True, color=CLASS_3_COLOR, thickness=2)
 
-                # --------------------- CRACK GENERATION -----------------------
+                generated_cracks = 0
+                available_edges = ["north", "south", "east", "west"]
+                random.shuffle(available_edges)
+                attempts = 0
 
-                for _ in range(NUM_CRACKS):
-                    crack = generate_random_crack(points_np)
-                    if len(crack) > 1:
+                while generated_cracks < MIN_CRACKS and attempts < 100:
+                    edge = available_edges[generated_cracks % 4]
+                    crack = generate_random_crack(points_np, existing_cracks, edge_name=edge)
+
+                    if crack:
+                        existing_cracks.append(crack)
+                        generated_cracks += 1
+
+                        # Draw and save bbox
                         total_segments = len(crack) - 1
                         for i in range(total_segments):
-                            # Progress ratio from start (0) to end (1)
                             progress = i / total_segments
+                            alpha_value = int(255 * (1 - progress))
+                            color_with_alpha = CRACK_COLOR + (alpha_value,)
+                            cv2.line(overlay, crack[i], crack[i + 1], color_with_alpha, thickness=CRACK_THICKNESS)
 
-                            # Thickness fades out smoothly (power 2 for smoothness)
-                            thickness = max(1, int(CRACK_THICKNESS * ((1 - progress) ** 2)))
+                        #if save_yolo_labels:
+                            #label_path = os.path.join(yolo_label_output_dir, f"{os.path.splitext(image_name)[0]}.txt")
+                            #save_crack_bounding_box(crack, image.shape, label_path)
 
-                            # Draw crack segment with varying thickness
-                            cv2.line(image, crack[i], crack[i + 1], CRACK_COLOR, thickness=thickness)
+                    attempts += 1
 
-        # --------------------- DISPLAY OR SAVE -----------------------
+                while generated_cracks < MIN_CRACKS:
+                    crack = generate_random_crack(points_np, existing_cracks, force_generate=True)
+                    if crack:
+                        existing_cracks.append(crack)
+                        generated_cracks += 1
+
+                        total_segments = len(crack) - 1
+                        for i in range(total_segments):
+                            progress = i / total_segments
+                            alpha_value = int(255 * (1 - progress))
+                            color_with_alpha = CRACK_COLOR + (alpha_value,)
+                            cv2.line(overlay, crack[i], crack[i + 1], color_with_alpha, thickness=CRACK_THICKNESS)
+
+                        if save_yolo_labels:
+                            label_path = os.path.join(yolo_label_output_dir, f"{os.path.splitext(image_name)[0]}.txt")
+                            save_crack_bounding_box(crack, image.shape, label_path)
+
+        def blend_overlay(base_image, overlay):
+            alpha = overlay[:, :, 3] / 255.0
+            for c in range(3):
+                base_image[:, :, c] = (1 - alpha) * base_image[:, :, c] + alpha * overlay[:, :, c]
+            return base_image.astype(np.uint8)
+
+        final_image = blend_overlay(image, overlay)
 
         fig, ax = plt.subplots(figsize=(10, 10))
-        ax.imshow(image)
+        ax.imshow(final_image)
         ax.axis('off')
 
         if output_dir:
@@ -136,10 +238,8 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
 
 # --------------------- USAGE -----------------------
 
-# Example directories (replace with your own)
 image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images"
 annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8"
-output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/Randomwalk_cracks"
+output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/crack_dataset/images"
 
-# Run visualization
 visualize_class3_with_cracks(image_dir, annotation_dir, output_dir)
