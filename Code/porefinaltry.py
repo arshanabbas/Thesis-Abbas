@@ -119,13 +119,24 @@ def generate_random_crack(polygon, existing_cracks, edge_name=None, force_genera
 def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
     return x / image_w, y / image_h, (2 * w) / image_w, (2 * h) / image_h
 
-def save_crack_bounding_box(crack_points, image_shape):
+def save_crack_bounding_box(crack_points, image_shape, trim_percent=5, padding_pixels=15):
     crack_points = np.array(crack_points)
-    x_min = np.min(crack_points[:, 0])
-    y_min = np.min(crack_points[:, 1])
-    x_max = np.max(crack_points[:, 0])
-    y_max = np.max(crack_points[:, 1])
 
+    # Sort and trim outlier points
+    x_sorted = np.sort(crack_points[:, 0])
+    y_sorted = np.sort(crack_points[:, 1])
+    lower_idx = int(len(x_sorted) * (trim_percent / 100))
+    upper_idx = int(len(x_sorted) * (1 - (trim_percent / 100)))
+    x_trimmed = x_sorted[lower_idx:upper_idx]
+    y_trimmed = y_sorted[lower_idx:upper_idx]
+
+    # Get trimmed bbox
+    x_min = max(0, np.min(x_trimmed) - padding_pixels)
+    x_max = min(image_shape[1], np.max(x_trimmed) + padding_pixels)
+    y_min = max(0, np.min(y_trimmed) - padding_pixels)
+    y_max = min(image_shape[0], np.max(y_trimmed) + padding_pixels)
+
+    # Center and size
     center_x = (x_min + x_max) / 2
     center_y = (y_min + y_max) / 2
     half_w = (x_max - x_min) / 2

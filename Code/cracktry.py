@@ -19,9 +19,9 @@ ANGLE_VARIATION = 15
 MIN_CRACKS = 2
 MAX_CRACKS = 2
 
-# YOLOv11 Format Output
+# YOLOv1 Format Output
 YOLO_CLASS_ID = 0
-save_yolo_labels = False
+save_yolo_labels = True
 yolo_label_output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/crack_dataset/labels"
 
 # --------------------- HELPER FUNCTIONS -----------------------
@@ -116,21 +116,39 @@ def generate_random_crack(polygon, existing_cracks, edge_name=None, force_genera
         return crack_points
     return None
 
-def save_crack_bounding_box(crack_points, image_shape, label_path):
+def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
+    return x / image_w, y / image_h, (2 * w) / image_w, (2 * h) / image_h
+
+def save_crack_bounding_box(crack_points, image_shape, trim_percent=5, padding_pixels=15):
     crack_points = np.array(crack_points)
-    x_min = np.min(crack_points[:, 0])
-    y_min = np.min(crack_points[:, 1])
-    x_max = np.max(crack_points[:, 0])
-    y_max = np.max(crack_points[:, 1])
 
-    # Normalize
-    x_center = (x_min + x_max) / 2 / image_shape[1]
-    y_center = (y_min + y_max) / 2 / image_shape[0]
-    width = (x_max - x_min) / image_shape[1]
-    height = (y_max - y_min) / image_shape[0]
+    # Sort and trim outlier points
+    x_sorted = np.sort(crack_points[:, 0])
+    y_sorted = np.sort(crack_points[:, 1])
+    lower_idx = int(len(x_sorted) * (trim_percent / 100))
+    upper_idx = int(len(x_sorted) * (1 - (trim_percent / 100)))
+    x_trimmed = x_sorted[lower_idx:upper_idx]
+    y_trimmed = y_sorted[lower_idx:upper_idx]
 
-    with open(label_path, "a") as f:
-        f.write(f"{YOLO_CLASS_ID} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
+    # Get trimmed bbox
+    x_min = max(0, np.min(x_trimmed) - padding_pixels)
+    x_max = min(image_shape[1], np.max(x_trimmed) + padding_pixels)
+    y_min = max(0, np.min(y_trimmed) - padding_pixels)
+    y_max = min(image_shape[0], np.max(y_trimmed) + padding_pixels)
+
+    # Center and size
+    center_x = (x_min + x_max) / 2
+    center_y = (y_min + y_max) / 2
+    half_w = (x_max - x_min) / 2
+    half_h = (y_max - y_min) / 2
+
+    bx, by, bw, bh = convert_to_yolo_bbox(center_x, center_y, half_w, half_h, image_shape[1], image_shape[0])
+    return (YOLO_CLASS_ID, bx, by, bw, bh)
+
+def write_yolo_labels_to_file(label_path, labels):
+    with open(label_path, "w") as f:
+        for label in labels:
+            f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
 # --------------------- MAIN FUNCTION -----------------------
 
@@ -157,6 +175,7 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
 
         overlay = np.zeros((image.shape[0], image.shape[1], 4), dtype=np.uint8)
         existing_cracks = []
+        labels = []
 
         with open(annotation_path, 'r') as f:
             for line in f:
@@ -186,7 +205,6 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
                         existing_cracks.append(crack)
                         generated_cracks += 1
 
-                        # Draw and save bbox
                         total_segments = len(crack) - 1
                         for i in range(total_segments):
                             progress = i / total_segments
@@ -194,9 +212,9 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
                             color_with_alpha = CRACK_COLOR + (alpha_value,)
                             cv2.line(overlay, crack[i], crack[i + 1], color_with_alpha, thickness=CRACK_THICKNESS)
 
-                        #if save_yolo_labels:
-                            #label_path = os.path.join(yolo_label_output_dir, f"{os.path.splitext(image_name)[0]}.txt")
-                            #save_crack_bounding_box(crack, image.shape, label_path)
+                        if save_yolo_labels:
+                            label = save_crack_bounding_box(crack, image.shape)
+                            labels.append(label)
 
                     attempts += 1
 
@@ -214,8 +232,12 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
                             cv2.line(overlay, crack[i], crack[i + 1], color_with_alpha, thickness=CRACK_THICKNESS)
 
                         if save_yolo_labels:
-                            label_path = os.path.join(yolo_label_output_dir, f"{os.path.splitext(image_name)[0]}.txt")
-                            save_crack_bounding_box(crack, image.shape, label_path)
+                            label = save_crack_bounding_box(crack, image.shape)
+                            labels.append(label)
+
+        if save_yolo_labels and labels:
+            label_path = os.path.join(yolo_label_output_dir, f"{os.path.splitext(image_name)[0]}.txt")
+            write_yolo_labels_to_file(label_path, labels)
 
         def blend_overlay(base_image, overlay):
             alpha = overlay[:, :, 3] / 255.0
