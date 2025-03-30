@@ -3,7 +3,7 @@ import cv2
 
 # Class color mappings for visualization
 CLASS_COLORS = {
-    0: (0, 255, 0),   # Green for Pore (Class 0)
+    0: (0, 0, 0),   # Green for Pore (Class 0)
     1: (255, 0, 0)    # Red for Porennest (Class 1)
 }
 

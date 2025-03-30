@@ -119,7 +119,7 @@ def generate_random_crack(polygon, existing_cracks, edge_name=None, force_genera
 def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
     return x / image_w, y / image_h, (2 * w) / image_w, (2 * h) / image_h
 
-def save_crack_bounding_box(crack_points, image_shape, trim_percent=5, padding_pixels=15):
+def save_crack_bounding_box(crack_points, image_shape, trim_percent=5, padding_pixels=20):
     crack_points = np.array(crack_points)
 
     # Sort and trim outlier points

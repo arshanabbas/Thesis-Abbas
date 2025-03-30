@@ -5,8 +5,8 @@ import random
 
 # ----------------------- Configuration -----------------------
 CLASS_3_COLOR = (64, 64, 64)
-CIRCLE_THICKNESS = 2
-MIN_PORE_RADIUS = 2
+CIRCLE_THICKNESS = 1
+MIN_PORE_RADIUS = 1
 MAX_PORE_RADIUS = 5
 MIN_TOTAL_PORES = 15
 MAX_TOTAL_PORES = 30
@@ -41,18 +41,25 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    # Always use ellipse for consistency, even for small pores
-    # Optional enhancement: minimum visual size enforcement
-    min_vis_radius = 2
-    draw_w = max(w, min_vis_radius)
-    draw_h = max(h, min_vis_radius)
+    if w < 3 or h < 3:
+        radius = max(1, min(w, h))
+        intensity = 80 - int((5 - radius) * 5)
+        intensity = max(40, min(intensity, 255))
 
-    # Optional enhancement: adjust color based on pore size (smaller = darker)
-    intensity = 80 - int((5 - min(w, h)) * 5)  # ranges roughly from 80 to 60
+        # Draw on mask with Gaussian blur for smoothness
+        mask = np.zeros_like(image, dtype=np.uint8)
+        cv2.circle(mask, (x, y), radius, (intensity, intensity, intensity), -1)
+        mask = cv2.GaussianBlur(mask, (3, 3), sigmaX=0.8, sigmaY=0.8)
+
+        # Composite the blurred circle onto original image
+        image[:] = np.where(mask > 0, mask, image)
+        return
+
+    # Elliptical pores for larger sizes
+    intensity = 80 - int((5 - min(w, h)) * 5)
     intensity = max(40, min(intensity, 255))
     color = (intensity, intensity, intensity)
-
-    cv2.ellipse(image, (x, y), (draw_w, draw_h), angle, 0, 360, color, -1)
+    cv2.ellipse(image, (x, y), (w, h), angle, 0, 360, color, -1)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):

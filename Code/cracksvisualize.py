@@ -40,8 +40,8 @@ def draw_yolo_boxes(image, label_path):
             y2 = int(y_center + box_h / 2)
 
             color = CLASS_COLORS.get(int(class_id), (128, 128, 128))  # default gray
-            cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(image, f"Class {int(class_id)}", (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+            cv2.rectangle(image, (x1, y1), (x2, y2), color, 1)
+            cv2.putText(image, f"Class {int(class_id)}", (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
 
     return image
 
