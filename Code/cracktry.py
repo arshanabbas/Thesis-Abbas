@@ -260,8 +260,8 @@ def visualize_class3_with_cracks(image_dir, annotation_dir, output_dir=None):
 
 # --------------------- USAGE -----------------------
 
-image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images"
-annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8"
+image_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/images"
+annotation_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/YOLOv8"
 output_dir = "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/crack_dataset/images"
 
 visualize_class3_with_cracks(image_dir, annotation_dir, output_dir)
