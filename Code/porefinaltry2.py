@@ -41,24 +41,32 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
+    # Skin-tone base for blending (light brownish-gray)
+    base_color = np.array([255, 255, 255], dtype=np.float32)
+
     if w < 3 or h < 3:
         radius = max(1, min(w, h))
         intensity = 80 - int((5 - radius) * 5)
         intensity = max(40, min(intensity, 255))
 
-        # Draw on mask with Gaussian blur for smoothness
+        # Blend color based on intensity
+        blended_color = (base_color * (intensity / 255.0)).astype(int)
+        circle_color = (int(blended_color[0]), int(blended_color[1]), int(blended_color[2]))
+
+        # Draw on mask with Gaussian blur
         mask = np.zeros_like(image, dtype=np.uint8)
-        cv2.circle(mask, (x, y), radius, (intensity, intensity, intensity), -1)
+        cv2.circle(mask, (x, y), radius, circle_color, -1)
         mask = cv2.GaussianBlur(mask, (3, 3), sigmaX=0.8, sigmaY=0.8)
 
-        # Composite the blurred circle onto original image
+        # Composite onto original image
         image[:] = np.where(mask > 0, mask, image)
         return
 
     # Elliptical pores for larger sizes
     intensity = 80 - int((5 - min(w, h)) * 5)
     intensity = max(40, min(intensity, 255))
-    color = (intensity, intensity, intensity)
+    blended_color = (base_color * (intensity / 255.0)).astype(int)
+    color = (int(blended_color[0]), int(blended_color[1]), int(blended_color[2]))
     cv2.ellipse(image, (x, y), (w, h), angle, 0, 360, color, -1)
 
 # ----------------------- Pore and Cluster Generation -----------------------
