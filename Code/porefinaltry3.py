@@ -41,7 +41,7 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    base_color = np.array([110, 110, 110], dtype=np.float32)
+    base_color = np.array([20, 20, 20], dtype=np.float32)
     intensity = 80 - int((5 - min(w, h)) * 5)
     intensity = max(40, min(intensity, 255))
     blended_color = (base_color * (intensity / 255.0)).astype(np.uint8)
@@ -56,10 +56,10 @@ def draw_pore(image, x, y, w, h, angle):
         cv2.ellipse(pore_mask, (x, y), (w, h), angle, 0, 360, color, -1)
 
     # Blur the pore mask
-    blurred_mask = cv2.GaussianBlur(pore_mask, (5, 5), sigmaX=1.0, sigmaY=1.0)
+    blurred_mask = cv2.GaussianBlur(pore_mask, (3, 3), sigmaX=1.0, sigmaY=1.0)
 
     # Blend the blurred pore onto the image
-    alpha = 0.4
+    alpha = 0.9
     image[:] = cv2.addWeighted(image, 1.0, blurred_mask, alpha, 0)
 
 # ----------------------- Pore and Cluster Generation -----------------------
@@ -168,6 +168,7 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
                 polygon = list(map(float, line.strip().split()[1:]))
                 points = [(int(polygon[i] * image.shape[1]), int(polygon[i + 1] * image.shape[0])) for i in range(0, len(polygon), 2)]
                 pores, labels = generate_balanced_pores_with_labels(points, image.shape)
+                print(f"{image_name} → Generated {len(pores)} pores")
                 label_list.extend(labels)
                 for (x, y, w, h, angle) in pores:
                     draw_pore(image, x, y, w, h, angle)
