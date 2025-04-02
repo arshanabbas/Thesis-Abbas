@@ -41,24 +41,25 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    base_color = np.array([40, 40, 40], dtype=np.uint8)  # Dark grey for visibility
-    color = tuple(int(c) for c in base_color)
+    # Step 1: Use a fixed dark color directly
+    color = (40, 40, 40)  # Soft, dark grey
 
-    # Step 1: Create an empty mask
+    # Step 2: Create blank mask
     mask = np.zeros_like(image, dtype=np.uint8)
 
-    # Step 2: Draw shape onto mask
+    # Step 3: Draw pore shape
     if w < 3 and h < 3:
         radius = max(1, min(w, h))
         cv2.circle(mask, (x, y), radius, color, -1)
     else:
         cv2.ellipse(mask, (x, y), (w, h), angle, 0, 360, color, -1)
 
-    # Step 3: Blur the mask
+    # Step 4: Feather edges
     blurred_mask = cv2.GaussianBlur(mask, (5, 5), sigmaX=1.0, sigmaY=1.0)
 
-    # Step 4: Add blurred mask to image with per-pixel logic
-    image[:] = np.where(blurred_mask > 0, blurred_mask, image)
+    # Step 5: Blend lightly into the image
+    alpha = 0.2
+    image[:] = cv2.addWeighted(image, 1.0, blurred_mask, alpha, 0)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
@@ -175,6 +176,18 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
         if label_list:
             save_yolo_labels(output_labels_dir, image_name, label_list)
 
+# ----------------------- Test Visualization -----------------------
+if __name__ == '__main__':
+    test_img = np.ones((256, 256, 3), dtype=np.uint8) * 200
+    for _ in range(20):
+        x = random.randint(20, 236)
+        y = random.randint(20, 236)
+        w = random.randint(2, 4)
+        h = random.randint(2, 4)
+        angle = random.randint(0, 180)
+        draw_pore(test_img, x, y, w, h, angle)
+    cv2.imwrite("test_output.jpg", cv2.cvtColor(test_img, cv2.COLOR_RGB2BGR))
+    print("Generated test_output.jpg with visible pores.")
 
 # ----------------------- Example -----------------------
 dirs = {
