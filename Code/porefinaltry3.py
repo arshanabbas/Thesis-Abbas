@@ -41,25 +41,24 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    # Step 1: Use a fixed dark color directly
-    color = (40, 40, 40)  # Soft, dark grey
+    # Step 1: Start with a dark pore color
+    color = (40, 40, 40)  # Still soft, but clearly darker
 
     # Step 2: Create blank mask
     mask = np.zeros_like(image, dtype=np.uint8)
 
-    # Step 3: Draw pore shape
+    # Step 3: Draw the pore shape
     if w < 3 and h < 3:
         radius = max(1, min(w, h))
         cv2.circle(mask, (x, y), radius, color, -1)
     else:
         cv2.ellipse(mask, (x, y), (w, h), angle, 0, 360, color, -1)
 
-    # Step 4: Feather edges
-    blurred_mask = cv2.GaussianBlur(mask, (5, 5), sigmaX=1.0, sigmaY=1.0)
+    # Step 4: Blur for realism
+    # blurred_mask = cv2.GaussianBlur(mask, (9, 9), sigmaX=1.0, sigmaY=1.0)
 
-    # Step 5: Blend lightly into the image
-    alpha = 0.2
-    image[:] = cv2.addWeighted(image, 1.0, blurred_mask, alpha, 0)
+    # Step 5: Subtract the blurred mask to make pores darker
+    image[:] = cv2.subtract(image, mask) #blurred_mask
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
