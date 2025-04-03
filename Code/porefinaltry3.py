@@ -43,36 +43,21 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
 def draw_pore(image, x, y, w, h, angle):
     w = max(2, w)
     h = max(2, h)
-    if random.random() < 0.3:
-        h = w  # occasionally force circular
 
-    # Generate elliptical Gaussian pore (deformed a bit randomly)
-    blob_w, blob_h = 2 * w + 1, 2 * h + 1
-    x_grid = np.linspace(-1, 1, blob_w)
-    y_grid = np.linspace(-1, 1, blob_h)
-    x_grid, y_grid = np.meshgrid(x_grid, y_grid)
+    # Step 1: Draw sharp dark elliptical core on a copy
+    core_mask = np.zeros_like(image, dtype=np.uint8)
+    cv2.ellipse(core_mask, (x, y), (w, h), angle, 0, 360, (20, 20, 20), -1)
 
-    angle_rad = np.deg2rad(angle)
-    xr = x_grid * np.cos(angle_rad) + y_grid * np.sin(angle_rad)
-    yr = -x_grid * np.sin(angle_rad) + y_grid * np.cos(angle_rad)
+    # Step 2: Draw feathered shadow/halo
+    halo_mask = np.zeros_like(image, dtype=np.uint8)
+    halo_radius_x = w + 2
+    halo_radius_y = h + 2
+    cv2.ellipse(halo_mask, (x, y), (halo_radius_x, halo_radius_y), angle, 0, 360, (40, 40, 40), -1)
+    blurred_halo = cv2.GaussianBlur(halo_mask, (0, 0), sigmaX=1.2, sigmaY=1.2)
 
-    sigma_x = 0.4 + random.uniform(0.0, 0.2)
-    sigma_y = 0.4 + random.uniform(0.0, 0.2)
-    blob = np.exp(-(xr**2 / (2 * sigma_x**2) + yr**2 / (2 * sigma_y**2)))
-    blob *= 255 * (0.4 + 0.6 * (max(w, h) / MAX_PORE_RADIUS))
-    blob = blob.astype(np.uint8)
-    blob_3ch = cv2.merge([blob] * 3)
-
-    # Coordinates for placement
-    top = max(0, y - h)
-    left = max(0, x - w)
-    bottom = min(image.shape[0], y + h + 1)
-    right = min(image.shape[1], x + w + 1)
-    roi = image[top:bottom, left:right]
-    bh, bw = bottom - top, right - left
-    cropped_blob = blob_3ch[0:bh, 0:bw]
-
-    image[top:bottom, left:right] = cv2.subtract(roi, cropped_blob)
+    # Step 3: Subtract both from image
+    combined_mask = cv2.add(core_mask, blurred_halo)
+    image[:] = cv2.subtract(image, combined_mask)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
