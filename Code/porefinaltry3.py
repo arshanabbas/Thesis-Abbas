@@ -43,33 +43,36 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
 def draw_pore(image, x, y, w, h, angle):
     w = max(2, w)
     h = max(2, h)
-    if random.random() < 0.5:
-        h = w  # make circular sometimes for natural variation
+    if random.random() < 0.3:
+        h = w  # occasionally force circular
 
-    # Core: sharp, dark center
-    core_mask = np.zeros_like(image, dtype=np.uint8)
-    core_color = (50, 50, 50)
-    cv2.ellipse(core_mask, (x, y), (w//2, h//2), angle, 0, 360, core_color, -1)
+    # Generate elliptical Gaussian pore (deformed a bit randomly)
+    blob_w, blob_h = 2 * w + 1, 2 * h + 1
+    x_grid = np.linspace(-1, 1, blob_w)
+    y_grid = np.linspace(-1, 1, blob_h)
+    x_grid, y_grid = np.meshgrid(x_grid, y_grid)
 
-    # Halo: soft Gaussian for feathered look
-    halo_size = max(w, h) * 2
-    blob = np.zeros((halo_size, halo_size), dtype=np.uint8)
-    cv2.circle(blob, (halo_size//2, halo_size//2), min(w, h), 60, -1)
-    blob = cv2.GaussianBlur(blob, (7, 7), 0.8)
-    blob = np.clip(blob * 1.5, 0, 255).astype(np.uint8)  # boost contrast
-    blob = cv2.merge([blob, blob, blob])
+    angle_rad = np.deg2rad(angle)
+    xr = x_grid * np.cos(angle_rad) + y_grid * np.sin(angle_rad)
+    yr = -x_grid * np.sin(angle_rad) + y_grid * np.cos(angle_rad)
 
-    top = max(0, y - halo_size//2)
-    left = max(0, x - halo_size//2)
-    bottom = min(image.shape[0], y + halo_size//2)
-    right = min(image.shape[1], x + halo_size//2)
+    sigma_x = 0.4 + random.uniform(0.0, 0.2)
+    sigma_y = 0.4 + random.uniform(0.0, 0.2)
+    blob = np.exp(-(xr**2 / (2 * sigma_x**2) + yr**2 / (2 * sigma_y**2)))
+    blob *= 255 * (0.4 + 0.6 * (max(w, h) / MAX_PORE_RADIUS))
+    blob = blob.astype(np.uint8)
+    blob_3ch = cv2.merge([blob] * 3)
 
-    blob_crop = blob[0:(bottom - top), 0:(right - left)]
+    # Coordinates for placement
+    top = max(0, y - h)
+    left = max(0, x - w)
+    bottom = min(image.shape[0], y + h + 1)
+    right = min(image.shape[1], x + w + 1)
     roi = image[top:bottom, left:right]
+    bh, bw = bottom - top, right - left
+    cropped_blob = blob_3ch[0:bh, 0:bw]
 
-    # Subtract halo first, then overlay sharp core
-    image[top:bottom, left:right] = cv2.subtract(roi, blob_crop)
-    image[:] = cv2.subtract(image, core_mask)
+    image[top:bottom, left:right] = cv2.subtract(roi, cropped_blob)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
