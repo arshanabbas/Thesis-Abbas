@@ -41,24 +41,35 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    # Step 1: Start with a dark pore color
-    color = (40, 40, 40)  # Still soft, but clearly darker
+    w = max(2, w)
+    h = max(2, h)
+    if random.random() < 0.5:
+        h = w  # make circular sometimes for natural variation
 
-    # Step 2: Create blank mask
-    mask = np.zeros_like(image, dtype=np.uint8)
+    # Core: sharp, dark center
+    core_mask = np.zeros_like(image, dtype=np.uint8)
+    core_color = (50, 50, 50)
+    cv2.ellipse(core_mask, (x, y), (w//2, h//2), angle, 0, 360, core_color, -1)
 
-    # Step 3: Draw the pore shape
-    if w < 3 and h < 3:
-        radius = max(1, min(w, h))
-        cv2.circle(mask, (x, y), radius, color, -1)
-    else:
-        cv2.ellipse(mask, (x, y), (w, h), angle, 0, 360, color, -1)
+    # Halo: soft Gaussian for feathered look
+    halo_size = max(w, h) * 2
+    blob = np.zeros((halo_size, halo_size), dtype=np.uint8)
+    cv2.circle(blob, (halo_size//2, halo_size//2), min(w, h), 60, -1)
+    blob = cv2.GaussianBlur(blob, (7, 7), 0.8)
+    blob = np.clip(blob * 1.5, 0, 255).astype(np.uint8)  # boost contrast
+    blob = cv2.merge([blob, blob, blob])
 
-    # Step 4: Blur for realism
-    # blurred_mask = cv2.GaussianBlur(mask, (9, 9), sigmaX=1.0, sigmaY=1.0)
+    top = max(0, y - halo_size//2)
+    left = max(0, x - halo_size//2)
+    bottom = min(image.shape[0], y + halo_size//2)
+    right = min(image.shape[1], x + halo_size//2)
 
-    # Step 5: Subtract the blurred mask to make pores darker
-    image[:] = cv2.subtract(image, mask) #blurred_mask
+    blob_crop = blob[0:(bottom - top), 0:(right - left)]
+    roi = image[top:bottom, left:right]
+
+    # Subtract halo first, then overlay sharp core
+    image[top:bottom, left:right] = cv2.subtract(roi, blob_crop)
+    image[:] = cv2.subtract(image, core_mask)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
@@ -181,10 +192,11 @@ if __name__ == '__main__':
     for _ in range(20):
         x = random.randint(20, 236)
         y = random.randint(20, 236)
-        w = random.randint(2, 4)
-        h = random.randint(2, 4)
+        w = random.randint(1, 5)
+        h = random.randint(1, 5)
         angle = random.randint(0, 180)
         draw_pore(test_img, x, y, w, h, angle)
+        cv2.circle(test_img, (x, y), 1, (255, 0, 0), 1)
     cv2.imwrite("test_output.jpg", cv2.cvtColor(test_img, cv2.COLOR_RGB2BGR))
     print("Generated test_output.jpg with visible pores.")
 
