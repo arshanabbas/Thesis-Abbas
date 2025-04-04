@@ -19,11 +19,24 @@ PORE_NEST_CLASS_ID = 1
 CLUSTER_PADDING = 10
 PORE_PADDING = 5
 MIN_DISTANCE_BETWEEN_CLUSTERS = 40
+EDGE_SAFETY_MARGIN = 3
 
 # ----------------------- Helper Functions -----------------------
 def is_point_inside_polygon(point, polygon):
     polygon = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
     return cv2.pointPolygonTest(polygon, tuple(map(float, point)), False) >= 0
+
+def is_far_from_polygon_edges(point, polygon, min_dist=3):
+    for i in range(len(polygon)):
+        pt1 = np.array(polygon[i][0])
+        pt2 = np.array(polygon[(i + 1) % len(polygon)][0])
+        edge_vec = pt2 - pt1
+        if np.linalg.norm(edge_vec) == 0:
+            continue
+        dist = np.abs(np.cross(edge_vec, pt1 - np.array(point))) / np.linalg.norm(edge_vec)
+        if dist < min_dist:
+            return False
+    return True
 
 def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
     return x / image_w, y / image_h, (2 * w) / image_w, (2 * h) / image_h
@@ -41,16 +54,25 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    """
-    Draw a single pore with perfect elliptical or circular shape.
-    Works directly on image, no upscaling/downscaling distortion.
-    """
-    if w <= 2 and h <= 2:
-        radius = max(1, min(w, h))
-        cv2.circle(image, (x, y), radius, (0, 0, 0), -1)
-    else:
-        cv2.ellipse(image, (x, y), (w, h), angle, 0, 360, (0, 0, 0), -1)
+    img_h, img_w = image.shape[:2]
+    scale = 4
+    up_w, up_h = img_w * scale, img_h * scale
 
+    # Create high-res blank mask
+    high_core = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    cx, cy = x * scale, y * scale
+    rw = w * scale
+    rh = h * scale
+
+    # Draw solid black ellipse core
+    cv2.ellipse(high_core, (cx, cy), (rw, rh), angle, 0, 360, (0, 0, 0), -1)
+
+    # Downscale mask
+    small_mask = cv2.resize(high_core, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    mask_to_subtract = 255 - small_mask
+
+    # Subtract pore directly from image
+    image[:] = cv2.subtract(image, mask_to_subtract)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
@@ -64,7 +86,9 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     cluster_centers = []
     while len(cluster_centers) < num_clusters:
         cx, cy = random.randint(x_min, x_max), random.randint(y_min, y_max)
-        if is_point_inside_polygon((cx, cy), polygon) and are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS):
+        if (is_point_inside_polygon((cx, cy), polygon) and
+            is_far_from_polygon_edges((cx, cy), polygon, EDGE_SAFETY_MARGIN) and
+            are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS)):
             cluster_centers.append((cx, cy))
 
     num_pores = max(MIN_TOTAL_PORES, min(MAX_TOTAL_PORES, int(cv2.contourArea(polygon) // 50)))
@@ -90,11 +114,12 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         placement_radius = random.uniform(5, 20)
         x = int(cx + placement_radius * np.cos(angle_rad))
         y = int(cy + placement_radius * np.sin(angle_rad))
-
         w, h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
         pore_angle = random.randint(0, 180)
 
-        if is_point_inside_polygon((x, y), polygon) and is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_CLUSTER_PORES):
+        if (is_point_inside_polygon((x, y), polygon) and
+            is_far_from_polygon_edges((x, y), polygon, EDGE_SAFETY_MARGIN) and
+            is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_CLUSTER_PORES)):
             pores.append((x, y, w, h, pore_angle))
             cluster_pore_positions[chosen_cluster_idx].append((x, y, w, h))
             cluster_success += 1
@@ -120,7 +145,9 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         x, y = random.randint(x_min, x_max), random.randint(y_min, y_max)
         w, h, angle = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(0, 180)
 
-        if is_point_inside_polygon((x, y), polygon) and is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_SCATTERED_PORES + MAX_PORE_RADIUS):
+        if (is_point_inside_polygon((x, y), polygon) and
+            is_far_from_polygon_edges((x, y), polygon, EDGE_SAFETY_MARGIN) and
+            is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_SCATTERED_PORES + MAX_PORE_RADIUS)):
             pores.append((x, y, w, h, angle))
             padded_w = w + PORE_PADDING
             padded_h = h + PORE_PADDING
@@ -167,7 +194,7 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
         if label_list:
             save_yolo_labels(output_labels_dir, image_name, label_list)
 
-# ----------------------- Example Usage -----------------------
+# ----------------------- Example -----------------------
 dirs = {
     "image_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images",
     "annotation_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8",
