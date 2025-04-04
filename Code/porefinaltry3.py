@@ -41,23 +41,32 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    w = max(2, w)
-    h = max(2, h)
+    scale = 4  # Drawing scale for cleaner antialiasing
+    img_h, img_w = image.shape[:2]
+    big_size = (img_w * scale, img_h * scale)
 
-    # Step 1: Draw sharp dark elliptical core on a copy
-    core_mask = np.zeros_like(image, dtype=np.uint8)
-    cv2.ellipse(core_mask, (x, y), (w, h), angle, 0, 360, (20, 20, 20), -1)
+    # Create upscaled mask
+    big_mask = np.zeros((big_size[1], big_size[0], 3), dtype=np.uint8)
 
-    # Step 2: Draw feathered shadow/halo
-    halo_mask = np.zeros_like(image, dtype=np.uint8)
-    halo_radius_x = w + 2
-    halo_radius_y = h + 2
-    cv2.ellipse(halo_mask, (x, y), (halo_radius_x, halo_radius_y), angle, 0, 360, (40, 40, 40), -1)
-    blurred_halo = cv2.GaussianBlur(halo_mask, (0, 0), sigmaX=1.2, sigmaY=1.2)
+    # Scale position and size
+    cx, cy = x * scale, y * scale
+    rw, rh = w * scale, h * scale
 
-    # Step 3: Subtract both from image
-    combined_mask = cv2.add(core_mask, blurred_halo)
-    image[:] = cv2.subtract(image, combined_mask)
+    # Draw black elliptical core (scaled)
+    cv2.ellipse(big_mask, (cx, cy), (rw, rh), angle, 0, 360, (0, 0, 0), -1)
+
+    # Draw feathered halo (also scaled)
+    halo_mask = np.zeros_like(big_mask)
+    cv2.ellipse(halo_mask, (cx, cy), (rw + 4, rh + 4), angle, 0, 360, (40, 40, 40), -1)
+    halo_mask = cv2.GaussianBlur(halo_mask, (9, 9), sigmaX=4.0, sigmaY=4.0)
+
+    # Combine and downscale back to original size
+    combined = cv2.add(big_mask, halo_mask)
+    small_mask = cv2.resize(combined, (img_w, img_h), interpolation=cv2.INTER_AREA)
+
+    # Subtract from original image
+    image[:] = cv2.subtract(image, small_mask)
+
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
