@@ -19,24 +19,12 @@ PORE_NEST_CLASS_ID = 1
 CLUSTER_PADDING = 10
 PORE_PADDING = 5
 MIN_DISTANCE_BETWEEN_CLUSTERS = 40
-EDGE_SAFETY_MARGIN = 3
+EDGE_MARGIN = 3  # New: prevent pores near polygon edges
 
 # ----------------------- Helper Functions -----------------------
 def is_point_inside_polygon(point, polygon):
     polygon = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
     return cv2.pointPolygonTest(polygon, tuple(map(float, point)), False) >= 0
-
-def is_far_from_polygon_edges(point, polygon, min_dist=3):
-    for i in range(len(polygon)):
-        pt1 = np.array(polygon[i][0])
-        pt2 = np.array(polygon[(i + 1) % len(polygon)][0])
-        edge_vec = pt2 - pt1
-        if np.linalg.norm(edge_vec) == 0:
-            continue
-        dist = np.abs(np.cross(edge_vec, pt1 - np.array(point))) / np.linalg.norm(edge_vec)
-        if dist < min_dist:
-            return False
-    return True
 
 def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
     return x / image_w, y / image_h, (2 * w) / image_w, (2 * h) / image_h
@@ -86,9 +74,7 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     cluster_centers = []
     while len(cluster_centers) < num_clusters:
         cx, cy = random.randint(x_min, x_max), random.randint(y_min, y_max)
-        if (is_point_inside_polygon((cx, cy), polygon) and
-            is_far_from_polygon_edges((cx, cy), polygon, EDGE_SAFETY_MARGIN) and
-            are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS)):
+        if is_point_inside_polygon((cx, cy), polygon) and are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS):
             cluster_centers.append((cx, cy))
 
     num_pores = max(MIN_TOTAL_PORES, min(MAX_TOTAL_PORES, int(cv2.contourArea(polygon) // 50)))
@@ -100,6 +86,10 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
             if np.linalg.norm(np.array([nx, ny]) - np.array([x, y])) < (max(w, h) + nr + min_dist):
                 return False
         return True
+
+    def is_away_from_edge(x, y, r):
+        dist = cv2.pointPolygonTest(polygon, (x, y), True)
+        return dist > r + EDGE_MARGIN
 
     cluster_pore_positions = [[] for _ in range(num_clusters)]
     cluster_success, total_cluster_attempts = 0, 0
@@ -114,12 +104,11 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         placement_radius = random.uniform(5, 20)
         x = int(cx + placement_radius * np.cos(angle_rad))
         y = int(cy + placement_radius * np.sin(angle_rad))
+
         w, h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
         pore_angle = random.randint(0, 180)
 
-        if (is_point_inside_polygon((x, y), polygon) and
-            is_far_from_polygon_edges((x, y), polygon, EDGE_SAFETY_MARGIN) and
-            is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_CLUSTER_PORES)):
+        if is_point_inside_polygon((x, y), polygon) and is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_CLUSTER_PORES) and is_away_from_edge(x, y, max(w, h)):
             pores.append((x, y, w, h, pore_angle))
             cluster_pore_positions[chosen_cluster_idx].append((x, y, w, h))
             cluster_success += 1
@@ -145,9 +134,7 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         x, y = random.randint(x_min, x_max), random.randint(y_min, y_max)
         w, h, angle = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(0, 180)
 
-        if (is_point_inside_polygon((x, y), polygon) and
-            is_far_from_polygon_edges((x, y), polygon, EDGE_SAFETY_MARGIN) and
-            is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_SCATTERED_PORES + MAX_PORE_RADIUS)):
+        if is_point_inside_polygon((x, y), polygon) and is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_SCATTERED_PORES + MAX_PORE_RADIUS) and is_away_from_edge(x, y, max(w, h)):
             pores.append((x, y, w, h, angle))
             padded_w = w + PORE_PADDING
             padded_h = h + PORE_PADDING
@@ -194,7 +181,20 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
         if label_list:
             save_yolo_labels(output_labels_dir, image_name, label_list)
 
-# ----------------------- Example -----------------------
+# ----------------------- Test Output (Standalone) -----------------------
+if __name__ == '__main__':
+    test_img = np.ones((256, 256, 3), dtype=np.uint8) * 200
+    for _ in range(30):
+        x = random.randint(20, 236)
+        y = random.randint(20, 236)
+        w = random.randint(1, 5)
+        h = random.randint(1, 5)
+        angle = random.randint(0, 180)
+        draw_pore(test_img, x, y, w, h, angle)
+    cv2.imwrite("test_output.jpg", cv2.cvtColor(test_img, cv2.COLOR_RGB2BGR))
+    print("Generated test_output.jpg with sample pores")
+
+# ----------------------- Directory Setup Example -----------------------
 dirs = {
     "image_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images",
     "annotation_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8",
@@ -202,5 +202,5 @@ dirs = {
     "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
 }
 
-if __name__ == '__main__':
-    visualize_class3_and_annotate(**dirs)
+# Uncomment the line below to run annotation generation automatically
+# visualize_class3_and_annotate(**dirs)
