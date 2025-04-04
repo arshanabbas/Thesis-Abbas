@@ -41,31 +41,15 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    scale = 4  # Drawing scale for cleaner antialiasing
-    img_h, img_w = image.shape[:2]
-    big_size = (img_w * scale, img_h * scale)
-
-    # Create upscaled mask
-    big_mask = np.zeros((big_size[1], big_size[0], 3), dtype=np.uint8)
-
-    # Scale position and size
-    cx, cy = x * scale, y * scale
-    rw, rh = w * scale, h * scale
-
-    # Draw black elliptical core (scaled)
-    cv2.ellipse(big_mask, (cx, cy), (rw, rh), angle, 0, 360, (0, 0, 0), -1)
-
-    # Draw feathered halo (also scaled)
-    halo_mask = np.zeros_like(big_mask)
-    cv2.ellipse(halo_mask, (cx, cy), (rw + 4, rh + 4), angle, 0, 360, (40, 40, 40), -1)
-    halo_mask = cv2.GaussianBlur(halo_mask, (9, 9), sigmaX=4.0, sigmaY=4.0)
-
-    # Combine and downscale back to original size
-    combined = cv2.add(big_mask, halo_mask)
-    small_mask = cv2.resize(combined, (img_w, img_h), interpolation=cv2.INTER_AREA)
-
-    # Subtract from original image
-    image[:] = cv2.subtract(image, small_mask)
+    """
+    Draw a single pore with perfect elliptical or circular shape.
+    Works directly on image, no upscaling/downscaling distortion.
+    """
+    if w <= 2 and h <= 2:
+        radius = max(1, min(w, h))
+        cv2.circle(image, (x, y), radius, (0, 0, 0), -1)
+    else:
+        cv2.ellipse(image, (x, y), (w, h), angle, 0, 360, (0, 0, 0), -1)
 
 
 # ----------------------- Pore and Cluster Generation -----------------------
@@ -183,25 +167,13 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
         if label_list:
             save_yolo_labels(output_labels_dir, image_name, label_list)
 
-# ----------------------- Test Visualization -----------------------
-if __name__ == '__main__':
-    test_img = np.ones((256, 256, 3), dtype=np.uint8) * 200
-    for _ in range(20):
-        x = random.randint(20, 236)
-        y = random.randint(20, 236)
-        w = random.randint(1, 5)
-        h = random.randint(1, 5)
-        angle = random.randint(0, 180)
-        draw_pore(test_img, x, y, w, h, angle)
-        cv2.circle(test_img, (x, y), 1, (255, 0, 0), 1)
-    cv2.imwrite("test_output.jpg", cv2.cvtColor(test_img, cv2.COLOR_RGB2BGR))
-    print("Generated test_output.jpg with visible pores.")
-
-# ----------------------- Example -----------------------
+# ----------------------- Example Usage -----------------------
 dirs = {
     "image_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images",
     "annotation_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8",
     "output_images_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/image",
     "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
 }
-visualize_class3_and_annotate(**dirs)
+
+if __name__ == '__main__':
+    visualize_class3_and_annotate(**dirs)
