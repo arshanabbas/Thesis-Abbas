@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import random
+import math
 
 # ----------------------- Configuration -----------------------
 CLASS_3_COLOR = (64, 64, 64)
@@ -14,12 +15,14 @@ MIN_CLUSTERS = 2
 MAX_CLUSTERS = 3
 MIN_DISTANCE_BETWEEN_CLUSTER_PORES = 8
 MIN_DISTANCE_BETWEEN_SCATTERED_PORES = 5
-PORE_CLASS_ID = 0
-PORE_NEST_CLASS_ID = 1
+MIN_DISTANCE_BETWEEN_CLUSTERS = 40
 CLUSTER_PADDING = 10
 PORE_PADDING = 5
-MIN_DISTANCE_BETWEEN_CLUSTERS = 40
-MIN_EDGE_DISTANCE = 3
+PORE_CLASS_ID = 0
+PORE_NEST_CLASS_ID = 1
+STRICT_CIRCULARITY = 0.85
+STRICT_ELONGATION = 1.35
+MIN_DISTANCE_BETWEEN_PORES = 7
 
 # ----------------------- Helper Functions -----------------------
 def is_point_inside_polygon(point, polygon):
@@ -33,7 +36,7 @@ def save_yolo_labels(output_labels_dir, image_name, labels):
     label_file = os.path.join(output_labels_dir, os.path.splitext(image_name)[0] + ".txt")
     with open(label_file, "w") as f:
         for label in labels:
-            f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\\n")
+            f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
 def are_clusters_far_enough(new_center, existing_centers, min_distance):
     for center in existing_centers:
@@ -41,67 +44,102 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
             return False
     return True
 
+def is_valid_pore_shape(w, h, min_circularity=STRICT_CIRCULARITY, max_elongation=STRICT_ELONGATION):
+    if w == 0 or h == 0:
+        return False
+    ratio = max(w, h) / min(w, h)
+    area = np.pi * (w / 2) * (h / 2)
+    perimeter = 2 * np.pi * np.sqrt((w/2)**2 + (h/2)**2) / 2
+    circularity = 4 * np.pi * area / (perimeter ** 2)
+    return ratio <= max_elongation and circularity >= min_circularity
+
+def is_far_from_existing(x, y, r, placed_pores, min_dist=MIN_DISTANCE_BETWEEN_PORES):
+    for px, py, pr in placed_pores:
+        dist = math.hypot(x - px, y - py)
+        if dist < (r + pr + min_dist):
+            return False
+    return True
+
 def draw_pore(image, x, y, w, h, angle):
-    if w < 3 and h < 3:
-        radius = max(1, min(w, h))
-        cv2.circle(image, (x, y), radius, (0, 0, 0), -1)
-    else:
-        cv2.ellipse(image, (x, y), (w, h), angle, 0, 360, (0, 0, 0), -1)
+    scale = 6
+    img_h, img_w = image.shape[:2]
+    up_w, up_h = img_w * scale, img_h * scale
+
+    mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    cx, cy = x * scale, y * scale
+    rw, rh = max(1, w * scale), max(1, h * scale)
+
+    center = (int(cx), int(cy))
+    axes = (int(rw), int(rh))
+    cv2.ellipse(mask, center, axes, angle, 0, 360, (0, 0, 0), -1, lineType=cv2.LINE_AA)
+
+    mask = cv2.GaussianBlur(mask, (3, 3), sigmaX=0.8, sigmaY=0.8)
+    mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    image[:] = cv2.subtract(image, 255 - mask)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
     pores, labels = [], []
-    polygon = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
-    x_min, y_min = np.min(polygon, axis=0)[0]
-    x_max, y_max = np.max(polygon, axis=0)[0]
+    polygon_np = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
+    x_min, y_min = np.min(polygon_np, axis=0)[0]
+    x_max, y_max = np.max(polygon_np, axis=0)[0]
     max_attempts = 200
     num_clusters = random.randint(MIN_CLUSTERS, MAX_CLUSTERS)
 
     cluster_centers = []
     while len(cluster_centers) < num_clusters:
         cx, cy = random.randint(x_min, x_max), random.randint(y_min, y_max)
-        if (is_point_inside_polygon((cx, cy), polygon) and
-            are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS)):
+        if is_point_inside_polygon((cx, cy), polygon_np) and are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS):
             cluster_centers.append((cx, cy))
 
-    num_pores = max(MIN_TOTAL_PORES, min(MAX_TOTAL_PORES, int(cv2.contourArea(polygon) // 50)))
-    cluster_pore_count = max(5, min(random.randint(5, 10) * num_clusters, num_pores - 5))
-    scattered_pore_count = max(5, num_pores - cluster_pore_count)
+    target_num_pores = random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES)
+    cluster_pore_target = target_num_pores // 2
+    scatter_pore_target = target_num_pores - cluster_pore_target
 
-    def is_far_enough(nx, ny, nr, existing, min_dist):
-        for (x, y, w, h, _) in existing:
-            if np.linalg.norm(np.array([nx, ny]) - np.array([x, y])) < (max(w, h) + nr + min_dist):
-                return False
-        return True
+    placed_pores = []
 
-    cluster_pore_positions = [[] for _ in range(num_clusters)]
-    cluster_success, total_cluster_attempts = 0, 0
-    max_total_cluster_attempts = cluster_pore_count * max_attempts
+    def try_place_pore(x, y, w, h, angle):
+        r = max(w, h)
+        if not is_point_inside_polygon((x, y), polygon_np):
+            return False
+        if is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
+            pores.append((x, y, w, h, angle))
+            placed_pores.append((x, y, r))
+            return True
+        return False
 
-    while cluster_success < cluster_pore_count and total_cluster_attempts < max_total_cluster_attempts:
-        total_cluster_attempts += 1
-        chosen_cluster_idx = random.randint(0, num_clusters - 1)
-        cx, cy = cluster_centers[chosen_cluster_idx]
+    attempts = 0
+    while len(pores) < cluster_pore_target and attempts < cluster_pore_target * max_attempts:
+        attempts += 1
+        cx, cy = random.choice(cluster_centers)
         angle_deg = random.uniform(0, 360)
         angle_rad = np.deg2rad(angle_deg)
         placement_radius = random.uniform(5, 20)
         x = int(cx + placement_radius * np.cos(angle_rad))
         y = int(cy + placement_radius * np.sin(angle_rad))
-        w, h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
-        pore_angle = random.randint(0, 180)
+        w = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+        h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+        angle = random.randint(0, 180)
+        try_place_pore(x, y, w, h, angle)
 
-        if (is_point_inside_polygon((x, y), polygon) and
-            is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_CLUSTER_PORES) and
-            MIN_EDGE_DISTANCE < x < img_shape[1] - MIN_EDGE_DISTANCE and
-            MIN_EDGE_DISTANCE < y < img_shape[0] - MIN_EDGE_DISTANCE):
-            pores.append((x, y, w, h, pore_angle))
-            cluster_pore_positions[chosen_cluster_idx].append((x, y, w, h))
-            cluster_success += 1
+    attempts = 0
+    while len(pores) < target_num_pores and attempts < 2 * target_num_pores * max_attempts:
+        attempts += 1
+        x = random.randint(x_min, x_max)
+        y = random.randint(y_min, y_max)
+        w = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+        h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+        angle = random.randint(0, 180)
+        if try_place_pore(x, y, w, h, angle):
+            padded_w, padded_h = w + PORE_PADDING, h + PORE_PADDING
+            bx, by, bw, bh = convert_to_yolo_bbox(x, y, padded_w, padded_h, img_shape[1], img_shape[0])
+            labels.append((PORE_CLASS_ID, bx, by, bw, bh))
 
-    for cluster_pores in cluster_pore_positions:
-        if not cluster_pores:
+    for cx, cy in cluster_centers:
+        cluster_related = [p for p in pores if math.hypot(p[0] - cx, p[1] - cy) < 25]
+        if not cluster_related:
             continue
-        xs, ys, ws, hs = zip(*cluster_pores)
+        xs, ys, ws, hs = zip(*[(x, y, w, h) for (x, y, w, h, _) in cluster_related])
         min_x = max(0, min(xs) - max(ws) - CLUSTER_PADDING)
         max_x = min(img_shape[1], max(xs) + max(ws) + CLUSTER_PADDING)
         min_y = max(0, min(ys) - max(hs) - CLUSTER_PADDING)
@@ -110,25 +148,6 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         cluster_w, cluster_h = max_x - min_x, max_y - min_y
         bx, by, bw, bh = convert_to_yolo_bbox(cx, cy, cluster_w / 2, cluster_h / 2, img_shape[1], img_shape[0])
         labels.append((PORE_NEST_CLASS_ID, bx, by, bw, bh))
-
-    scatter_success, total_scatter_attempts = 0, 0
-    max_total_scatter_attempts = scattered_pore_count * max_attempts
-
-    while scatter_success < scattered_pore_count and total_scatter_attempts < max_total_scatter_attempts:
-        total_scatter_attempts += 1
-        x, y = random.randint(x_min, x_max), random.randint(y_min, y_max)
-        w, h, angle = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(0, 180)
-
-        if (is_point_inside_polygon((x, y), polygon) and
-            is_far_enough(x, y, max(w, h), pores, MIN_DISTANCE_BETWEEN_SCATTERED_PORES + MAX_PORE_RADIUS) and
-            MIN_EDGE_DISTANCE < x < img_shape[1] - MIN_EDGE_DISTANCE and
-            MIN_EDGE_DISTANCE < y < img_shape[0] - MIN_EDGE_DISTANCE):
-            pores.append((x, y, w, h, angle))
-            padded_w = w + PORE_PADDING
-            padded_h = h + PORE_PADDING
-            bx, by, bw, bh = convert_to_yolo_bbox(x, y, padded_w, padded_h, img_shape[1], img_shape[0])
-            labels.append((PORE_CLASS_ID, bx, by, bw, bh))
-            scatter_success += 1
 
     return pores, labels
 
@@ -169,17 +188,7 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
         if label_list:
             save_yolo_labels(output_labels_dir, image_name, label_list)
 
-# ----------------------- Optional Test -----------------------
-if __name__ == '__main__':
-    test_img = np.ones((256, 256, 3), dtype=np.uint8) * 200
-    for _ in range(25):
-        x, y = random.randint(10, 245), random.randint(10, 245)
-        w, h, angle = random.randint(1, 5), random.randint(1, 5), random.randint(0, 180)
-        draw_pore(test_img, x, y, w, h, angle)
-    cv2.imwrite("test_output.jpg", cv2.cvtColor(test_img, cv2.COLOR_RGB2BGR))
-    print("Generated test_output.jpg")
-
-# ----------------------- Directory Setup Example -----------------------
+# ----------------------- Execution -----------------------
 dirs = {
     "image_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images",
     "annotation_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8",
@@ -187,4 +196,5 @@ dirs = {
     "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
 }
 
-# visualize_class3_and_annotate(**dirs)
+if __name__ == '__main__':
+    visualize_class3_and_annotate(**dirs)
