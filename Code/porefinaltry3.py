@@ -46,12 +46,23 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def is_valid_pore_shape(w, h, min_circularity=STRICT_CIRCULARITY, max_elongation=STRICT_ELONGATION):
+    if w < 3 or h < 3:
+        return False  # Too small to draw cleanly
+
     if w == 0 or h == 0:
         return False
+
     ratio = max(w, h) / min(w, h)
     area = np.pi * (w / 2) * (h / 2)
-    perimeter = 2 * np.pi * np.sqrt((w/2)**2 + (h/2)**2) / 2
+    perimeter = 2 * np.pi * np.sqrt((w / 2)**2 + (h / 2)**2) / 2
     circularity = 4 * np.pi * area / (perimeter ** 2)
+
+    if perimeter < 10:
+        return False
+
+    if min(w, h) <= 4 and circularity < 0.9:
+        return False
+
     return ratio <= max_elongation and circularity >= min_circularity
 
 def is_far_from_existing(x, y, r, placed_pores, min_dist=MIN_DISTANCE_BETWEEN_PORES):
