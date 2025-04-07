@@ -65,22 +65,13 @@ def is_far_from_polygon_edge(x, y, polygon, margin):
     dist = cv2.pointPolygonTest(np.array(polygon, dtype=np.int32).reshape((-1, 1, 2)), (x, y), True)
     return dist is not None and dist >= margin
 
-def draw_pore(image, x, y, w, h, angle):
-    scale = 6
-    img_h, img_w = image.shape[:2]
-    up_w, up_h = img_w * scale, img_h * scale
-
-    mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
-    cx, cy = x * scale, y * scale
-    rw, rh = max(1, w * scale), max(1, h * scale)
-
-    center = (int(cx), int(cy))
-    axes = (int(rw), int(rh))
-    cv2.ellipse(mask, center, axes, angle, 0, 360, (50, 60, 70), -1, lineType=cv2.LINE_AA)
-
-    mask = cv2.GaussianBlur(mask, (3, 3), sigmaX=0.8, sigmaY=0.8)
-    mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
-    image[:] = cv2.subtract(image, 255 - mask)
+def draw_pore(image, x, y, w, h, angle, color=(64, 64, 64)):
+    """
+    Draw a high-quality, anti-aliased, solid-colored pore directly onto the image.
+    """
+    center = (int(x), int(y))
+    axes = (max(1, int(w)), max(1, int(h)))
+    cv2.ellipse(image, center, axes, angle, 0, 360, color, -1, lineType=cv2.LINE_AA)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
