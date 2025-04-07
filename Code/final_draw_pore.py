@@ -23,6 +23,7 @@ PORE_NEST_CLASS_ID = 1
 STRICT_CIRCULARITY = 0.85
 STRICT_ELONGATION = 1.35
 MIN_DISTANCE_BETWEEN_PORES = 7
+EDGE_MARGIN = 3
 
 # ----------------------- Helper Functions -----------------------
 def is_point_inside_polygon(point, polygon):
@@ -60,6 +61,10 @@ def is_far_from_existing(x, y, r, placed_pores, min_dist=MIN_DISTANCE_BETWEEN_PO
             return False
     return True
 
+def is_far_from_polygon_edge(x, y, polygon, margin):
+    dist = cv2.pointPolygonTest(np.array(polygon, dtype=np.int32).reshape((-1, 1, 2)), (x, y), True)
+    return dist is not None and dist >= margin
+
 def draw_pore(image, x, y, w, h, angle):
     scale = 6
     img_h, img_w = image.shape[:2]
@@ -89,7 +94,9 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     cluster_centers = []
     while len(cluster_centers) < num_clusters:
         cx, cy = random.randint(x_min, x_max), random.randint(y_min, y_max)
-        if is_point_inside_polygon((cx, cy), polygon_np) and are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS):
+        if (is_point_inside_polygon((cx, cy), polygon_np) and 
+            are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS) and 
+            is_far_from_polygon_edge(cx, cy, polygon, EDGE_MARGIN)):
             cluster_centers.append((cx, cy))
 
     target_num_pores = random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES)
@@ -101,6 +108,8 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     def try_place_pore(x, y, w, h, angle):
         r = max(w, h)
         if not is_point_inside_polygon((x, y), polygon_np):
+            return False
+        if not is_far_from_polygon_edge(x, y, polygon, EDGE_MARGIN):
             return False
         if is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
             pores.append((x, y, w, h, angle))
