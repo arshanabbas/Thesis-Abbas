@@ -1,11 +1,12 @@
-import os
 from ultralytics import YOLO
 
-# Load the pre-trained model
-model = YOLO("D:/Abbas/GitHub/PolygontoYOLO/yolo11n-seg.pt")
+# Load a pretrained YOLO11n model
+model = YOLO("yolo11n.pt")
 
-# Path to the dataset configuration file
-data = 'C:/Users/arab/Documents/GitHub/Thesis-Abbas/Code/dataset.yaml'
-
-# Start training
-results = model.train(data= "D:/Abbas/GitHub/Thesis-Abbas/Code/dataset.yaml", epochs=100, imgsz=1024)
+# Train the model on the COCO8 dataset for 100 epochs
+train_results = model.train(
+    data="train.yaml",  # Path to dataset configuration file
+    epochs=300,  # Number of training epochs
+    imgsz=640,  # Image size for training
+    device=0,  # Device to run on (e.g., 'cpu', 0, [0,1,2,3])
+)
