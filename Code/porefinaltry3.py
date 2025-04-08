@@ -23,12 +23,15 @@ PORE_NEST_CLASS_ID = 1
 STRICT_CIRCULARITY = 0.85
 STRICT_ELONGATION = 1.35
 MIN_DISTANCE_BETWEEN_PORES = 7
-EDGE_MARGIN = 3
+BOUNDARY_MARGIN = 3
 
 # ----------------------- Helper Functions -----------------------
 def is_point_inside_polygon(point, polygon):
     polygon = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
     return cv2.pointPolygonTest(polygon, tuple(map(float, point)), False) >= 0
+
+def is_point_inside_margin_mask(x, y, margin_mask):
+    return margin_mask[y, x] == 255
 
 def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
     return x / image_w, y / image_h, (2 * w) / image_w, (2 * h) / image_h
@@ -37,7 +40,7 @@ def save_yolo_labels(output_labels_dir, image_name, labels):
     label_file = os.path.join(output_labels_dir, os.path.splitext(image_name)[0] + ".txt")
     with open(label_file, "w") as f:
         for label in labels:
-            f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
+            f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\\n")
 
 def are_clusters_far_enough(new_center, existing_centers, min_distance):
     for center in existing_centers:
@@ -46,23 +49,12 @@ def are_clusters_far_enough(new_center, existing_centers, min_distance):
     return True
 
 def is_valid_pore_shape(w, h, min_circularity=STRICT_CIRCULARITY, max_elongation=STRICT_ELONGATION):
-    if w < 3 or h < 3:
-        return False  # Too small to draw cleanly
-
     if w == 0 or h == 0:
         return False
-
     ratio = max(w, h) / min(w, h)
     area = np.pi * (w / 2) * (h / 2)
-    perimeter = 2 * np.pi * np.sqrt((w / 2)**2 + (h / 2)**2) / 2
+    perimeter = 2 * np.pi * np.sqrt((w/2)**2 + (h/2)**2) / 2
     circularity = 4 * np.pi * area / (perimeter ** 2)
-
-    if perimeter < 10:
-        return False
-
-    if min(w, h) <= 4 and circularity < 0.9:
-        return False
-
     return ratio <= max_elongation and circularity >= min_circularity
 
 def is_far_from_existing(x, y, r, placed_pores, min_dist=MIN_DISTANCE_BETWEEN_PORES):
@@ -72,17 +64,18 @@ def is_far_from_existing(x, y, r, placed_pores, min_dist=MIN_DISTANCE_BETWEEN_PO
             return False
     return True
 
-def is_far_from_polygon_edge(x, y, polygon, margin):
-    dist = cv2.pointPolygonTest(np.array(polygon, dtype=np.int32).reshape((-1, 1, 2)), (x, y), True)
-    return dist is not None and dist >= margin
-
-def draw_pore(image, x, y, w, h, angle, color=(64, 64, 64)):
-    """
-    Draw a high-quality, anti-aliased, solid-colored pore directly onto the image.
-    """
-    center = (int(x), int(y))
-    axes = (max(1, int(w)), max(1, int(h)))
-    cv2.ellipse(image, center, axes, angle, 0, 360, color, -1, lineType=cv2.LINE_AA)
+def draw_pore(image, x, y, w, h, angle):
+    scale = 6
+    img_h, img_w = image.shape[:2]
+    up_w, up_h = img_w * scale, img_h * scale
+    mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    cx, cy = x * scale, y * scale
+    rw, rh = max(1, w * scale), max(1, h * scale)
+    center = (int(cx), int(cy))
+    axes = (int(rw), int(rh))
+    cv2.ellipse(mask, center, axes, angle, 0, 360, (45, 45, 45), -1, lineType=cv2.LINE_AA)
+    mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    image[:] = cv2.subtract(image, 255 - mask)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
@@ -93,25 +86,31 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     max_attempts = 200
     num_clusters = random.randint(MIN_CLUSTERS, MAX_CLUSTERS)
 
+    mask = np.zeros((img_shape[0], img_shape[1]), dtype=np.uint8)
+    cv2.fillPoly(mask, [polygon_np], 255)
+    margin_mask = cv2.erode(mask, np.ones((2*BOUNDARY_MARGIN+1, 2*BOUNDARY_MARGIN+1), np.uint8))
+
     cluster_centers = []
     while len(cluster_centers) < num_clusters:
         cx, cy = random.randint(x_min, x_max), random.randint(y_min, y_max)
-        if (is_point_inside_polygon((cx, cy), polygon_np) and 
-            are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS) and 
-            is_far_from_polygon_edge(cx, cy, polygon, EDGE_MARGIN)):
+        if mask[cy, cx] == 255 and margin_mask[cy, cx] == 255 and are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS):
             cluster_centers.append((cx, cy))
 
     target_num_pores = random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES)
-    cluster_pore_target = target_num_pores // 2
-    scatter_pore_target = target_num_pores - cluster_pore_target
+    small, medium, large = target_num_pores // 3, target_num_pores // 3, target_num_pores - 2 * (target_num_pores // 3)
+
+    size_ranges = (
+        [(1, 2)] * small +
+        [(2, 3)] * medium +
+        [(4, 5)] * large
+    )
+    random.shuffle(size_ranges)
 
     placed_pores = []
 
     def try_place_pore(x, y, w, h, angle):
         r = max(w, h)
-        if not is_point_inside_polygon((x, y), polygon_np):
-            return False
-        if not is_far_from_polygon_edge(x, y, polygon, EDGE_MARGIN):
+        if mask[y, x] != 255 or margin_mask[y, x] != 255:
             return False
         if is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
             pores.append((x, y, w, h, angle))
@@ -120,31 +119,29 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         return False
 
     attempts = 0
-    while len(pores) < cluster_pore_target and attempts < cluster_pore_target * max_attempts:
+    while size_ranges and attempts < 1000:
         attempts += 1
-        cx, cy = random.choice(cluster_centers)
-        angle_deg = random.uniform(0, 360)
-        angle_rad = np.deg2rad(angle_deg)
-        placement_radius = random.uniform(5, 20)
-        x = int(cx + placement_radius * np.cos(angle_rad))
-        y = int(cy + placement_radius * np.sin(angle_rad))
-        w = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
-        h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
-        angle = random.randint(0, 180)
-        try_place_pore(x, y, w, h, angle)
-
-    attempts = 0
-    while len(pores) < target_num_pores and attempts < 2 * target_num_pores * max_attempts:
-        attempts += 1
-        x = random.randint(x_min, x_max)
-        y = random.randint(y_min, y_max)
-        w = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
-        h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+        if random.random() < 0.6 and cluster_centers:
+            cx, cy = random.choice(cluster_centers)
+            angle_deg = random.uniform(0, 360)
+            placement_radius = random.uniform(5, 20)
+            x = int(cx + placement_radius * np.cos(np.deg2rad(angle_deg)))
+            y = int(cy + placement_radius * np.sin(np.deg2rad(angle_deg)))
+        else:
+            x = random.randint(x_min, x_max)
+            y = random.randint(y_min, y_max)
+        w_range, h_range = size_ranges[-1]
+        w = random.randint(w_range, h_range)
+        h = random.randint(w_range, h_range)
         angle = random.randint(0, 180)
         if try_place_pore(x, y, w, h, angle):
-            padded_w, padded_h = w + PORE_PADDING, h + PORE_PADDING
-            bx, by, bw, bh = convert_to_yolo_bbox(x, y, padded_w, padded_h, img_shape[1], img_shape[0])
-            labels.append((PORE_CLASS_ID, bx, by, bw, bh))
+            size_ranges.pop()
+
+    for (x, y, w, h, angle) in pores:
+        padded_w = w + PORE_PADDING
+        padded_h = h + PORE_PADDING
+        bx, by, bw, bh = convert_to_yolo_bbox(x, y, padded_w, padded_h, img_shape[1], img_shape[0])
+        labels.append((PORE_CLASS_ID, bx, by, bw, bh))
 
     for cx, cy in cluster_centers:
         cluster_related = [p for p in pores if math.hypot(p[0] - cx, p[1] - cy) < 25]
