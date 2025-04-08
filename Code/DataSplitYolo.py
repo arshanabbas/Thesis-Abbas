@@ -4,11 +4,11 @@ import random
 from sklearn.model_selection import train_test_split
 
 # Paths
-image_folder = 'F:/Arshan_Abbas/Fabian/Task3/Code/PolygontoYOLO/images'        # Path to your 'images' folder
-annotation_folder = 'F:/Arshan_Abbas/Fabian/Task3/Code/PolygontoYOLO/YOLOv8'  # Path to your 'annotations' folder
+image_folder = 'F:/Arshan_Abbas/Fabian/Task3/Code/PolygontoYOLO/crack_dataset/images'        # Path to your 'images' folder
+annotation_folder = 'F:/Arshan_Abbas/Fabian/Task3/Code/PolygontoYOLO/crack_dataset/labels'  # Path to your 'annotations' folder
 
 # Define structure
-dataset_folder = 'F:/Arshan_Abbas/Fabian/Task3/Code/PolygontoYOLO/dataset'
+dataset_folder = 'F:/Arshan_Abbas/Fabian/Task3/Code/PolygontoYOLO/dataset_crack'
 train_image_folder = os.path.join(dataset_folder, 'images', 'train')
 val_image_folder = os.path.join(dataset_folder, 'images', 'val')
 train_label_folder = os.path.join(dataset_folder, 'labels', 'train')
