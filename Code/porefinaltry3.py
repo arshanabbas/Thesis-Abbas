@@ -68,19 +68,15 @@ def draw_pore(image, x, y, w, h, angle):
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
-
     mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
     cx, cy = x * scale, y * scale
     rw, rh = max(1, w * scale), max(1, h * scale)
     center = (int(cx), int(cy))
     axes = (int(rw), int(rh))
-
-    avg_color = int(np.mean(image[max(0, y - 1):min(img_h, y + 2), max(0, x - 1):min(img_w, x + 2)]))
-    pore_color = int(avg_color * 0.6)
-    cv2.ellipse(mask, center, axes, angle, 0, 360, (pore_color, pore_color, pore_color), -1, lineType=cv2.LINE_AA)
+    cv2.ellipse(mask, center, axes, angle, 0, 360, (45, 45, 45), -1, lineType=cv2.LINE_AA)
     mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    image[:] = cv2.min(image, mask)  # Solid burn-in, no transparency
 
-    image[:] = cv2.min(image, mask)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
