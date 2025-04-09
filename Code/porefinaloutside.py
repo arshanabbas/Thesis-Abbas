@@ -66,7 +66,7 @@ def is_far_from_existing(x, y, r, placed_pores, min_dist=MIN_DISTANCE_BETWEEN_PO
 
 def draw_pore(image, x, y, w, h, angle):
     # Define colors
-    OUTER_RING_COLOR = (180, 180, 180)  # Silverish metallic
+    OUTER_RING_COLOR = (200, 200, 200)  # Silverish metallic
     INNER_CORE_COLOR = (45, 45, 45)     # Dark inner fill
 
     scale = 6
