@@ -24,6 +24,10 @@ STRICT_CIRCULARITY = 0.85
 STRICT_ELONGATION = 1.35
 MIN_DISTANCE_BETWEEN_PORES = 7
 BOUNDARY_MARGIN = 3
+PORE_RING_THRESHOLD = 4  # Adjust based on appearance
+SMALL_RING_PADDING = 2   # Ring thickness for small pores
+LARGE_RING_PADDING = 4   # Ring thickness for larger pores
+
 
 # ----------------------- Helper Functions -----------------------
 def is_point_inside_polygon(point, polygon):
@@ -65,52 +69,39 @@ def is_far_from_existing(x, y, r, placed_pores, min_dist=MIN_DISTANCE_BETWEEN_PO
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    # Define colors
-    OUTER_RING_COLOR = (200, 200, 200)  # Silverish metallic
-    INNER_CORE_COLOR = (45, 45, 45)     # Dark inner fill
-
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
 
-    # Blank white canvas
-    high_res_mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    # Colors
+    outer_color = (180, 180, 180)  # metallic halo
+    inner_color = (45, 45, 45)     # dark pore core
 
-    # Scale ellipse coordinates
+    # Decide halo thickness
+    if max(w, h) >= 4:
+        padding = 4
+    else:
+        padding = 2
+
+    # Scale everything
     cx, cy = x * scale, y * scale
-    rw, rh = max(1, w * scale), max(1, h * scale)
+    rw, rh = w * scale, h * scale
+    outer_rw, outer_rh = (w + padding) * scale, (h + padding) * scale
 
-    # First: draw outer ring
-    ring_padding = int(scale * 1.5)  # Slightly larger than the core
-    cv2.ellipse(
-        high_res_mask,
-        (int(cx), int(cy)),
-        (int(rw + ring_padding), int(rh + ring_padding)),
-        angle,
-        0, 360,
-        OUTER_RING_COLOR,
-        -1,
-        lineType=cv2.LINE_AA
-    )
+    # Create base white canvas
+    mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
 
-    # Then: draw the inner dark core
-    cv2.ellipse(
-        high_res_mask,
-        (int(cx), int(cy)),
-        (int(rw), int(rh)),
-        angle,
-        0, 360,
-        INNER_CORE_COLOR,
-        -1,
-        lineType=cv2.LINE_AA
-    )
+    # Draw outer ring (light gray ellipse first)
+    cv2.ellipse(mask, (int(cx), int(cy)), (int(outer_rw), int(outer_rh)),
+                angle, 0, 360, outer_color, -1, lineType=cv2.LINE_AA)
 
-    # Downsample the high-res mask
-    final_mask = cv2.resize(high_res_mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    # Draw inner core (dark center ellipse on top)
+    cv2.ellipse(mask, (int(cx), int(cy)), (int(rw), int(rh)),
+                angle, 0, 360, inner_color, -1, lineType=cv2.LINE_AA)
 
-    # Apply using pixel-wise min to blend naturally
-    image[:] = cv2.min(image, final_mask)
-
+    # Downscale and implant into image
+    mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    image[:] = cv2.min(image, mask)
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
     pores, labels = [], []
