@@ -72,36 +72,34 @@ def draw_pore(image, x, y, w, h, angle):
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
-
-    # Colors
-    outer_color = (161, 171, 180)  # metallic halo
-    inner_color = (45, 45, 45)     # dark pore core
-
-    # Decide halo thickness
-    if max(w, h) >= 4:
-        padding = 4
-    else:
-        padding = 2
-
-    # Scale everything
-    cx, cy = x * scale, y * scale
-    rw, rh = w * scale, h * scale
-    outer_rw, outer_rh = (w + padding) * scale, (h + padding) * scale
-
-    # Create base white canvas
     mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
 
-    # Draw outer ring (light gray ellipse first)
-    cv2.ellipse(mask, (int(cx), int(cy)), (int(outer_rw), int(outer_rh)),
-                angle, 0, 360, outer_color, -1, lineType=cv2.LINE_AA)
+    cx, cy = x * scale, y * scale
+    rw, rh = max(1, w * scale), max(1, h * scale)
+    center = (int(cx), int(cy))
 
-    # Draw inner core (dark center ellipse on top)
-    cv2.ellipse(mask, (int(cx), int(cy)), (int(rw), int(rh)),
-                angle, 0, 360, inner_color, -1, lineType=cv2.LINE_AA)
+    # Random arc for ring (partial ring realism)
+    arc_span = random.randint(210, 270)
+    arc_start = random.randint(0, 360 - arc_span)
+    arc_end = arc_start + arc_span
 
-    # Downscale and implant into image
+    # Metallic ring taper
+    taper_levels = 3
+    outer_colors = [(160,160,160), (180,180,180), (200,200,200)]
+    for i, color in enumerate(outer_colors):
+        pad = (i + 1) * 2 * scale if max(w, h) > 3 else (i + 1) * 1 * scale
+        axes = (int(rw + pad), int(rh + pad))
+        cv2.ellipse(mask, center, axes, angle, arc_start, arc_end, color, -1, lineType=cv2.LINE_AA)
+
+    # Inner core
+    inner_color = (45, 45, 45)
+    inner_axes = (int(rw), int(rh))
+    cv2.ellipse(mask, center, inner_axes, angle, 0, 360, inner_color, -1, lineType=cv2.LINE_AA)
+
+    # Downscale and apply with cv2.min
     mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
     image[:] = cv2.min(image, mask)
+
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
     pores, labels = [], []
