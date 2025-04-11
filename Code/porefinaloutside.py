@@ -72,33 +72,39 @@ def draw_pore(image, x, y, w, h, angle):
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
-    mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+
+    # Create masks
+    base_mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    ring_mask = np.ones_like(base_mask) * 255
 
     cx, cy = x * scale, y * scale
     rw, rh = max(1, w * scale), max(1, h * scale)
     center = (int(cx), int(cy))
 
-    # Random arc for ring (partial ring realism)
+    # Random partial ring for realism
     arc_span = random.randint(210, 270)
     arc_start = random.randint(0, 360 - arc_span)
     arc_end = arc_start + arc_span
 
-    # Metallic ring taper
-    taper_levels = 3
-    outer_colors = [(160,160,160), (180,180,180), (200,200,200)]
-    for i, color in enumerate(outer_colors):
-        pad = (i + 1) * 2 * scale if max(w, h) > 3 else (i + 1) * 1 * scale
-        axes = (int(rw + pad), int(rh + pad))
-        cv2.ellipse(mask, center, axes, angle, arc_start, arc_end, color, -1, lineType=cv2.LINE_AA)
+    # Outer ring: light gray, to be blurred
+    ring_color = (180, 180, 180)
+    ring_axes = (int(rw + 3 * scale), int(rh + 3 * scale))  # slightly larger ring
+    cv2.ellipse(ring_mask, center, ring_axes, angle, arc_start, arc_end, ring_color, -1, lineType=cv2.LINE_AA)
 
-    # Inner core
-    inner_color = (45, 45, 45)
-    inner_axes = (int(rw), int(rh))
-    cv2.ellipse(mask, center, inner_axes, angle, 0, 360, inner_color, -1, lineType=cv2.LINE_AA)
+    # Apply Gaussian blur to ring only
+    blurred_ring = cv2.GaussianBlur(ring_mask, (9, 9), sigmaX=2.5, sigmaY=2.5)
 
-    # Downscale and apply with cv2.min
-    mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
-    image[:] = cv2.min(image, mask)
+    # Combine blurred ring with base mask
+    combined_mask = cv2.min(base_mask, blurred_ring)
+
+    # Draw sharp dark core over the combined mask
+    pore_color = (45, 45, 45)
+    core_axes = (int(rw), int(rh))
+    cv2.ellipse(combined_mask, center, core_axes, angle, 0, 360, pore_color, -1, lineType=cv2.LINE_AA)
+
+    # Downscale and apply final mask
+    final_mask = cv2.resize(combined_mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    image[:] = cv2.min(image, final_mask)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
