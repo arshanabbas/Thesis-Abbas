@@ -74,7 +74,7 @@ def draw_pore(image, x, y, w, h, angle):
     up_w, up_h = img_w * scale, img_h * scale
 
     # Colors
-    outer_color = (180, 180, 180)  # metallic halo
+    outer_color = (161, 171, 180)  # metallic halo
     inner_color = (45, 45, 45)     # dark pore core
 
     # Decide halo thickness
