@@ -60,30 +60,29 @@ def draw_pore(image, x, y, w, h, angle):
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
-
-    # Create blank canvas for ring + core
-    mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
-
-    # Scale and center
+    base = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
     cx, cy = x * scale, y * scale
     rw, rh = max(1, w * scale), max(1, h * scale)
     center = (int(cx), int(cy))
 
-    # ==== Set ring thickness based on pore size ====
-    ring_thickness = 2 * scale if max(w, h) <= 3 else 4 * scale
-    ring_axes = (int(rw + ring_thickness), int(rh + ring_thickness))
-
-    # ==== Draw Outer Ring ====
+    # Outer ring: layered arcs
     ring_color = (180, 180, 180)
-    cv2.ellipse(mask, center, ring_axes, angle, 0, 360, ring_color, thickness=-1, lineType=cv2.LINE_AA)
+    arc_start = random.randint(0, 180)
+    arc_mid = arc_start + random.randint(100, 120)
+    arc_end = arc_mid + random.randint(40, 60)
 
-    # ==== Draw Inner Core ====
-    core_color = (45, 45, 45)
+    ring_axes = (int(rw + 3), int(rh + 3))
+    cv2.ellipse(base, center, ring_axes, angle, arc_start, arc_mid, ring_color, 3, cv2.LINE_AA)
+    cv2.ellipse(base, center, ring_axes, angle, arc_mid, arc_end, ring_color, 2, cv2.LINE_AA)
+    cv2.ellipse(base, center, ring_axes, angle, arc_end, arc_end+20, ring_color, 1, cv2.LINE_AA)
+
+    blurred = cv2.GaussianBlur(base, (7, 7), sigmaX=2.0, sigmaY=2.0)
+
+    # Inner core
     core_axes = (int(rw), int(rh))
-    cv2.ellipse(mask, center, core_axes, angle, 0, 360, core_color, thickness=-1, lineType=cv2.LINE_AA)
+    cv2.ellipse(blurred, center, core_axes, angle, 0, 360, (45, 45, 45), -1, lineType=cv2.LINE_AA)
 
-    # Resize and apply
-    final_mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    final_mask = cv2.resize(blurred, (img_w, img_h), interpolation=cv2.INTER_AREA)
     image[:] = cv2.min(image, final_mask)
 
 # ----------------------- Pore and Cluster Generation -----------------------
