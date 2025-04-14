@@ -57,51 +57,67 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
+    import cv2
+    import numpy as np
+    import random
+
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
-    mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
-    cx, cy = int(x * scale), int(y * scale)
+
+    # Create blank canvas
+    base_mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    ring_layer = np.ones_like(base_mask) * 255  # For fading arcs
+
+    cx, cy = x * scale, y * scale
     rw, rh = max(1, w * scale), max(1, h * scale)
-    center = (cx, cy)
+    center = (int(cx), int(cy))
 
-    # Outer ring parameters
-    ring_color = (180, 180, 180)
-    arc_span = random.randint(200, 230)
-    arc_start = random.randint(0, 360 - arc_span)
-    segments = [
-        (arc_span, 1.0, 3),
-        ((360 - arc_span) // 2, 0.4, 2),
-        ((360 - arc_span) // 2, 0.2, 1),
+    # Ring thickness based on pore size
+    ring_base_thickness = 2 * scale if max(w, h) <= 3 else 4 * scale
+    ring_axes = (int(rw + ring_base_thickness), int(rh + ring_base_thickness))
+
+    # Arc segmentation
+    total_angle = 360
+    start_angle = random.randint(0, 360)
+    full_arc = random.randint(200, 240)  # 55–60%
+    fade_arc1 = int((360 - full_arc) * 0.5)
+    fade_arc2 = 360 - full_arc - fade_arc1
+
+    fading_sections = [
+        (full_arc, 1.0, ring_base_thickness),        # Fully visible
+        (fade_arc1, 0.4, ring_base_thickness // 2),  # Mid fade
+        (fade_arc2, 0.2, max(1, ring_base_thickness // 3))  # Light fade
     ]
-    ring_axes = (
-        int(rw + (3 * scale if max(w, h) > 3 else 2 * scale)),
-        int(rh + (3 * scale if max(w, h) > 3 else 2 * scale))
-    )
 
-    ring_mask = np.ones_like(mask) * 255
-    current_angle = arc_start
-    for arc_length, alpha, thickness in segments:
-        shade = int(ring_color[0] * alpha)
-        faded_color = (shade, shade, shade)
-        cv2.ellipse(
-            ring_mask, center, ring_axes, angle,
-            current_angle, current_angle + arc_length,
-            faded_color, thickness=-1, lineType=cv2.LINE_AA
-        )
-        current_angle += arc_length
+    # Draw each fading arc
+    current_angle = start_angle
+    for arc_len, opacity, thickness in fading_sections:
+        end_angle = current_angle + arc_len
+        shade = int(180 * opacity)
+        color = (shade, shade, shade)
 
-    # Apply blur to only the ring
-    blurred_ring = cv2.GaussianBlur(ring_mask, (11, 11), sigmaX=2.5, sigmaY=2.5)
-    combined = cv2.min(mask, blurred_ring)
+        arc_img = ring_layer.copy()
+        cv2.ellipse(arc_img, center, ring_axes, angle, current_angle, end_angle,
+                    color, thickness=thickness, lineType=cv2.LINE_AA)
 
-    # Inner pore (core)
+        # Apply blur to faded segments only
+        if opacity < 1.0:
+            arc_img = cv2.GaussianBlur(arc_img, (9, 9), sigmaX=2.0, sigmaY=2.0)
+
+        ring_layer = cv2.min(ring_layer, arc_img)
+        current_angle = end_angle
+
+    # Combine with base
+    combined_mask = cv2.min(base_mask, ring_layer)
+
+    # Draw dark inner core
     core_color = (45, 45, 45)
-    core_axes = (rw, rh)
-    cv2.ellipse(combined, center, core_axes, angle, 0, 360, core_color, -1, lineType=cv2.LINE_AA)
+    core_axes = (int(rw), int(rh))
+    cv2.ellipse(combined_mask, center, core_axes, angle, 0, 360, core_color, -1, lineType=cv2.LINE_AA)
 
-    # Downscale
-    final_mask = cv2.resize(combined, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    # Resize and apply
+    final_mask = cv2.resize(combined_mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
     image[:] = cv2.min(image, final_mask)
 
 # ----------------------- Pore and Cluster Generation -----------------------
