@@ -69,11 +69,12 @@ def draw_pore(image, x, y, w, h, angle):
     rw, rh = max(1, w * scale), max(1, h * scale)
     center = (int(cx), int(cy))
 
+    # ==== Set ring thickness based on pore size ====
+    ring_thickness = 2 * scale if max(w, h) <= 3 else 4 * scale
+    ring_axes = (int(rw + ring_thickness), int(rh + ring_thickness))
+
     # ==== Draw Outer Ring ====
     ring_color = (180, 180, 180)
-    ring_axes = (int(rw + 3 * scale), int(rh + 3 * scale))
-
-    # Full ring for now (next steps: partial + fade)
     cv2.ellipse(mask, center, ring_axes, angle, 0, 360, ring_color, thickness=-1, lineType=cv2.LINE_AA)
 
     # ==== Draw Inner Core ====
@@ -84,7 +85,6 @@ def draw_pore(image, x, y, w, h, angle):
     # Resize and apply
     final_mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
     image[:] = cv2.min(image, final_mask)
-
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
