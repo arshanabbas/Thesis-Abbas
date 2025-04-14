@@ -61,55 +61,28 @@ def draw_pore(image, x, y, w, h, angle):
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
 
-    # Create base canvas
-    base_mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    # Create blank canvas for ring + core
+    mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
 
+    # Scale and center
     cx, cy = x * scale, y * scale
     rw, rh = max(1, w * scale), max(1, h * scale)
     center = (int(cx), int(cy))
 
-    # === Outer Ring Logic ===
-    ring_mask = np.ones_like(base_mask) * 255
-    total_arc = 360
-    visible_arc = random.randint(180, 220)  # ~55–60% visible
-    start_angle = random.randint(0, 360)
-    end_angle = start_angle + visible_arc
-
-    # Simulate ring thickness + fade
-    thickness_levels = [
-        (3 * scale, 1.0),   # full opacity
-        (2 * scale, 0.6),   # partial
-        (1 * scale, 0.3),   # lightest
-    ]
-
+    # ==== Draw Outer Ring ====
     ring_color = (180, 180, 180)
+    ring_axes = (int(rw + 3 * scale), int(rh + 3 * scale))
 
-    for i, (thick, opacity) in enumerate(thickness_levels):
-        ring_opacity = int(ring_color[0] * opacity)
-        faded_color = (ring_opacity, ring_opacity, ring_opacity)
-        radius_adjust = i  # slightly thinner as opacity decreases
-        axes = (int(rw + 3*scale - radius_adjust), int(rh + 3*scale - radius_adjust))
-        cv2.ellipse(
-            ring_mask, center, axes, angle,
-            start_angle, end_angle,
-            faded_color, -1, lineType=cv2.LINE_AA
-        )
+    # Full ring for now (next steps: partial + fade)
+    cv2.ellipse(mask, center, ring_axes, angle, 0, 360, ring_color, thickness=-1, lineType=cv2.LINE_AA)
 
-    # Gaussian blur only to ring
-    blurred_ring = cv2.GaussianBlur(ring_mask, (7, 7), sigmaX=2.5, sigmaY=2.5)
-
-    # Merge blurred ring with base
-    combined_mask = cv2.min(base_mask, blurred_ring)
-
-    # === Inner Pore Core ===
+    # ==== Draw Inner Core ====
     core_color = (45, 45, 45)
     core_axes = (int(rw), int(rh))
-    cv2.ellipse(
-        combined_mask, center, core_axes, angle,
-        0, 360, core_color, -1, lineType=cv2.LINE_AA
-    )
+    cv2.ellipse(mask, center, core_axes, angle, 0, 360, core_color, thickness=-1, lineType=cv2.LINE_AA)
 
-    final_mask = cv2.resize(combined_mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    # Resize and apply
+    final_mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
     image[:] = cv2.min(image, final_mask)
 
 
