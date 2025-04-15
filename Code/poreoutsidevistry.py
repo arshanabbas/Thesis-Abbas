@@ -56,7 +56,45 @@ def is_far_from_existing(x, y, r, placed_pores):
             return False
     return True
 
+def draw_pore(image, x, y, w, h, angle):
+    scale = 6
+    img_h, img_w = image.shape[:2]
+    up_w, up_h = img_w * scale, img_h * scale
 
+    ring_layer = np.zeros((up_h, up_w, 4), dtype=np.uint8)
+    cx, cy = int(x * scale), int(y * scale)
+    rw, rh = max(1, int(w * scale)), max(1, int(h * scale))
+    center = (cx, cy)
+
+    arc_start = random.randint(0, 360)
+    arc_span = random.randint(200, 240)
+    segments = 12
+    arc_per_segment = arc_span / segments
+
+    for i in range(segments):
+        alpha = int(np.interp(i, [0, segments - 1], [255, 50]))
+        thickness = int(np.interp(i, [0, segments - 1], [3 * scale, 1 * scale]))
+        ring_axes = (int(rw + thickness), int(rh + thickness))
+        ring_color = (180, 180, 180, alpha)
+
+        seg_start = arc_start + int(i * arc_per_segment)
+        seg_end = arc_start + int((i + 1) * arc_per_segment)
+        cv2.ellipse(ring_layer, center, ring_axes, angle, seg_start, seg_end, ring_color, thickness=1, lineType=cv2.LINE_AA)
+
+    ring_layer = cv2.GaussianBlur(ring_layer, (5, 5), sigmaX=2, sigmaY=2)
+
+    core_layer = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    cv2.ellipse(core_layer, center, (rw, rh), angle, 0, 360, (45, 45, 45), -1, lineType=cv2.LINE_AA)
+
+    ring_layer = cv2.resize(ring_layer, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    core_layer = cv2.resize(core_layer, (img_w, img_h), interpolation=cv2.INTER_AREA)
+
+    ring_rgb = ring_layer[..., :3]
+    ring_alpha = ring_layer[..., 3:] / 255.0
+    core_rgb = core_layer
+
+    composite = (ring_rgb * ring_alpha + core_rgb * (1 - ring_alpha)).astype(np.uint8)
+    image[:] = cv2.min(image, composite)
 
 """def draw_pore(image, x, y, w, h, angle):
     scale = 6
