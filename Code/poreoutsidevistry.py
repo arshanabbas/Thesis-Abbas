@@ -61,57 +61,47 @@ def draw_pore(image, x, y, w, h, angle):
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
 
+    # Canvas with alpha channel for fading
+    rgba_mask = np.zeros((up_h, up_w, 4), dtype=np.uint8)
     cx, cy = int(x * scale), int(y * scale)
     rw, rh = max(1, w * scale), max(1, h * scale)
     center = (cx, cy)
 
-    # Create an RGBA ring layer
-    ring_layer = np.zeros((up_h, up_w, 4), dtype=np.uint8)
+    # Outer ring logic
+    ring_color = (180, 180, 180)
+    ring_axes = (int(rw * 1.6), int(rh * 1.6))
 
-    # Ring size based on pore size
-    ring_thickness = 2 * scale if max(w, h) <= 3 else 4 * scale
-    ring_axes = (int(rw + ring_thickness), int(rh + ring_thickness))
-
-    # Segment settings (angular)
-    start_angle = random.randint(0, 359)
-    total_angle = 360
-    visible_angle = random.randint(200, 240)  # 55–60%
-    fade_mid = (360 - visible_angle) // 2
-
-    segments = [
-        (visible_angle, 255, 3),              # 100% opacity, 3px thick
-        (fade_mid, int(255 * 0.4), 2),        # 40% opacity, 2px thick
-        (360 - visible_angle - fade_mid, int(255 * 0.2), 1),  # 20% opacity, 1px thick
+    # Define fading arc segments with (arc length, alpha, thickness)
+    arc_segments = [
+        (random.randint(180, 220), 255, 3),     # Full visible segment
+        (random.randint(60, 80), 102, 2),       # Medium fade
+        (random.randint(40, 60), 51, 1),        # Light fade
     ]
 
-    # Draw segments with fading alpha + variable thickness
-    current_angle = start_angle
-    for arc_len, alpha_val, thickness in segments:
-        end_angle = current_angle + arc_len
-        overlay_color = (180, 180, 180, alpha_val)
-        cv2.ellipse(ring_layer, center, ring_axes, angle, current_angle, end_angle, overlay_color, thickness, cv2.LINE_AA)
-        current_angle = end_angle
+    start_angle = random.randint(0, 360)
+    for arc_length, alpha, thickness in arc_segments:
+        end_angle = start_angle + arc_length
+        color_with_alpha = (*ring_color, alpha)
+        cv2.ellipse(rgba_mask, center, ring_axes, angle, start_angle, end_angle, color_with_alpha, thickness, cv2.LINE_AA)
+        start_angle = end_angle
 
-    # Optional blur for smooth fading
-    ring_layer = cv2.GaussianBlur(ring_layer, (5, 5), sigmaX=1.5, sigmaY=1.5)
+    # Apply Gaussian blur to soften just the outer ring
+    blurred_rgba = cv2.GaussianBlur(rgba_mask, (7, 7), sigmaX=1.5)
 
-    # Draw inner core on a separate RGB mask
-    core_mask = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    # Blend outer ring with image using alpha
+    rgb_mask = blurred_rgba[..., :3]
+    alpha = blurred_rgba[..., 3:] / 255.0
+    upscaled_image = cv2.resize(image, (up_w, up_h), interpolation=cv2.INTER_LINEAR)
+    blended = (rgb_mask * alpha + upscaled_image * (1 - alpha)).astype(np.uint8)
+
+    # Inner core (on top of everything)
     core_color = (45, 45, 45)
     core_axes = (int(rw), int(rh))
-    cv2.ellipse(core_mask, center, core_axes, angle, 0, 360, core_color, -1, cv2.LINE_AA)
+    cv2.ellipse(blended, center, core_axes, angle, 0, 360, core_color, -1, cv2.LINE_AA)
 
-    # Downscale masks
-    ring_layer = cv2.resize(ring_layer, (img_w, img_h), interpolation=cv2.INTER_AREA)
-    core_mask = cv2.resize(core_mask, (img_w, img_h), interpolation=cv2.INTER_AREA)
-
-    # Blend ring into image (alpha blending)
-    alpha = ring_layer[:, :, 3] / 255.0
-    for c in range(3):
-        image[:, :, c] = (alpha * ring_layer[:, :, c] + (1 - alpha) * image[:, :, c]).astype(np.uint8)
-
-    # Apply dark core (min blending)
-    image[:] = cv2.min(image, core_mask)
+    # Downscale back to original resolution
+    final = cv2.resize(blended, (img_w, img_h), interpolation=cv2.INTER_AREA)
+    image[:] = final
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
