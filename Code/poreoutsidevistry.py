@@ -61,47 +61,61 @@ def draw_pore(image, x, y, w, h, angle):
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
 
-    # Canvas with alpha channel for fading
-    rgba_mask = np.zeros((up_h, up_w, 4), dtype=np.uint8)
-    cx, cy = int(x * scale), int(y * scale)
+    # Create base mask with RGBA support
+    base_mask = np.ones((up_h, up_w, 4), dtype=np.uint8) * 255
+    base_mask[..., 3] = 0  # Initialize with full transparency
+
+    cx, cy = x * scale, y * scale
     rw, rh = max(1, w * scale), max(1, h * scale)
-    center = (cx, cy)
+    center = (int(cx), int(cy))
+    core_axes = (int(rw), int(rh))
 
-    # Outer ring logic
-    ring_color = (180, 180, 180)
-    ring_axes = (int(rw * 1.6), int(rh * 1.6))
-
-    # Define fading arc segments with (arc length, alpha, thickness)
-    arc_segments = [
-        (random.randint(180, 220), 255, 3),     # Full visible segment
-        (random.randint(60, 80), 102, 2),       # Medium fade
-        (random.randint(40, 60), 51, 1),        # Light fade
+    # Outer ring fade levels: opacity, thickness, scaling factor
+    fade_steps = [
+        (1.0, 3, 1.6),
+        (0.4, 2, 1.4),
+        (0.2, 1, 1.2)
     ]
 
     start_angle = random.randint(0, 360)
-    for arc_length, alpha, thickness in arc_segments:
-        end_angle = start_angle + arc_length
-        color_with_alpha = (*ring_color, alpha)
-        cv2.ellipse(rgba_mask, center, ring_axes, angle, start_angle, end_angle, color_with_alpha, thickness, cv2.LINE_AA)
-        start_angle = end_angle
+    visible_arc = random.randint(200, 240)  # ~55-60%
+    fading_angles = [
+        (visible_arc, 0),
+        (int((360 - visible_arc) * 0.5), visible_arc),
+        (360 - visible_arc - int((360 - visible_arc) * 0.5), visible_arc + int((360 - visible_arc) * 0.5))
+    ]
 
-    # Apply Gaussian blur to soften just the outer ring
-    blurred_rgba = cv2.GaussianBlur(rgba_mask, (7, 7), sigmaX=1.5)
+    for (opacity, thickness, scale_factor), (arc_len, arc_offset) in zip(fade_steps, fading_angles):
+        axes = (int(rw * scale_factor), int(rh * scale_factor))
+        color = (180, 180, 180, int(opacity * 255))
+        cv2.ellipse(base_mask, center, axes, angle,
+                    start_angle + arc_offset,
+                    start_angle + arc_offset + arc_len,
+                    color, thickness=thickness, lineType=cv2.LINE_AA)
 
-    # Blend outer ring with image using alpha
-    rgb_mask = blurred_rgba[..., :3]
-    alpha = blurred_rgba[..., 3:] / 255.0
-    upscaled_image = cv2.resize(image, (up_w, up_h), interpolation=cv2.INTER_LINEAR)
-    blended = (rgb_mask * alpha + upscaled_image * (1 - alpha)).astype(np.uint8)
+    # Gaussian blur only on alpha channel
+    alpha_channel = base_mask[..., 3]
+    blurred_alpha = cv2.GaussianBlur(alpha_channel, (5, 5), sigmaX=1.5)
+    base_mask[..., 3] = blurred_alpha
 
-    # Inner core (on top of everything)
-    core_color = (45, 45, 45)
-    core_axes = (int(rw), int(rh))
-    cv2.ellipse(blended, center, core_axes, angle, 0, 360, core_color, -1, cv2.LINE_AA)
+    # Draw inner core at full opacity and solid black
+    core_mask = np.zeros_like(base_mask)
+    cv2.ellipse(core_mask, center, core_axes, angle, 0, 360, (45, 45, 45, 255), -1, lineType=cv2.LINE_AA)
 
-    # Downscale back to original resolution
-    final = cv2.resize(blended, (img_w, img_h), interpolation=cv2.INTER_AREA)
-    image[:] = final
+    # Composite both
+    ring_rgb = base_mask[..., :3]
+    ring_alpha = base_mask[..., 3:] / 255.0
+    core_rgb = core_mask[..., :3]
+    core_alpha = core_mask[..., 3:] / 255.0
+
+    composite = ring_rgb * ring_alpha + core_rgb * core_alpha * (1 - ring_alpha)
+    alpha_final = np.clip(ring_alpha + core_alpha * (1 - ring_alpha), 0, 1)
+
+    final_rgba = np.dstack((composite, alpha_final * 255)).astype(np.uint8)
+    final_rgb = cv2.resize(final_rgba[..., :3], (img_w, img_h), interpolation=cv2.INTER_AREA)
+
+    # Blend onto base image
+    image[:] = cv2.min(image, final_rgb)
 
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
