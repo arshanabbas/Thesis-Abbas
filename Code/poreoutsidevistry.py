@@ -57,11 +57,8 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    import cv2
-    import numpy as np
-    import random
 
-    scale = 6
+    scale = 4  # reduced from 6 to limit memory
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
 
@@ -71,7 +68,7 @@ def draw_pore(image, x, y, w, h, angle):
 
     max_dim = max(w, h)
 
-    # Updated small-pore tuning block
+    # Smart thickness and fading logic
     if max_dim <= 2:
         base_thickness = 1
         ring_offset = 3
@@ -85,7 +82,7 @@ def draw_pore(image, x, y, w, h, angle):
         blur_strength = (5, 5)
         sigma = 1.5
 
-    # Create RGBA layer for outer ring
+    # Create RGBA ring layer
     ring_layer = np.zeros((up_h, up_w, 4), dtype=np.uint8)
     ring_color = (200, 200, 200)
 
@@ -112,25 +109,27 @@ def draw_pore(image, x, y, w, h, angle):
             lineType=cv2.LINE_AA
         )
 
-    # Blur outer ring
+    # Apply Gaussian blur only to ring
     ring_blurred = cv2.GaussianBlur(ring_layer, blur_strength, sigmaX=sigma)
 
-    # Create inner pore core
+    # Core pore layer (same shape as ring)
     core_layer = np.ones_like(ring_layer) * 255
     cv2.ellipse(core_layer, center, (rw, rh), angle, 0, 360, (45, 45, 45, 255), -1, lineType=cv2.LINE_AA)
 
-    # Alpha blending
+    # Blend using float32 for memory efficiency
     ring_rgb = ring_blurred[..., :3].astype(np.float32)
-    ring_alpha = ring_blurred[..., 3:] / 255.0
+    ring_alpha = ring_blurred[..., 3:].astype(np.float32) / 255.0
     core_rgb = core_layer[..., :3].astype(np.float32)
-    core_alpha = core_layer[..., 3:] / 255.0
+    core_alpha = core_layer[..., 3:].astype(np.float32) / 255.0
 
+    # Alpha composite
     composite = ring_rgb * ring_alpha + core_rgb * core_alpha * (1 - ring_alpha)
-    composite = composite.astype(np.uint8)
+    composite = np.clip(composite, 0, 255).astype(np.uint8)
 
-    # Resize and apply to original image
+    # Downscale back to final resolution
     final_mask = cv2.resize(composite, (img_w, img_h), interpolation=cv2.INTER_AREA)
     image[:] = cv2.min(image, final_mask)
+
 
 """def draw_pore(image, x, y, w, h, angle):
     scale = 6
