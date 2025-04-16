@@ -57,6 +57,9 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
+    import cv2
+    import numpy as np
+    import random
 
     scale = 6
     img_h, img_w = image.shape[:2]
@@ -66,25 +69,32 @@ def draw_pore(image, x, y, w, h, angle):
     rw, rh = max(1, int(w * scale)), max(1, int(h * scale))
     center = (cx, cy)
 
-    # Determine ring thickness logic
     max_dim = max(w, h)
+
+    # Updated small-pore tuning block
     if max_dim <= 2:
-        base_thickness = 2
+        base_thickness = 1
+        ring_offset = 3
+        visible_arc = random.randint(140, 160)
+        blur_strength = (3, 3)
+        sigma = 0.8
     else:
         base_thickness = random.choice([2, 3])
+        ring_offset = 6
+        visible_arc = random.randint(200, 240)
+        blur_strength = (5, 5)
+        sigma = 1.5
 
-    # Create transparent RGBA ring canvas
+    # Create RGBA layer for outer ring
     ring_layer = np.zeros((up_h, up_w, 4), dtype=np.uint8)
     ring_color = (200, 200, 200)
 
-    # Fading segments setup
-    fade_steps = 8  # More gradual
-    visible_arc = random.randint(200, 240)
     fade_start = random.randint(0, 360 - visible_arc)
+    fade_steps = 8
     angle_step = visible_arc // fade_steps
 
     for i in range(fade_steps):
-        opacity_ratio = 1.0 - i / fade_steps          # 1.0 → 0.0
+        opacity_ratio = 1.0 - i / fade_steps
         alpha = int(opacity_ratio * 255)
         thickness = max(1, int(base_thickness * opacity_ratio))
         start_angle = fade_start + i * angle_step
@@ -93,7 +103,7 @@ def draw_pore(image, x, y, w, h, angle):
         cv2.ellipse(
             ring_layer,
             center,
-            (rw + 6, rh + 6),
+            (rw + ring_offset, rh + ring_offset),
             angle,
             start_angle,
             end_angle,
@@ -102,24 +112,14 @@ def draw_pore(image, x, y, w, h, angle):
             lineType=cv2.LINE_AA
         )
 
-    # Apply Gaussian blur for smooth transition
-    ring_blurred = cv2.GaussianBlur(ring_layer, (5, 5), sigmaX=1.5)
+    # Blur outer ring
+    ring_blurred = cv2.GaussianBlur(ring_layer, blur_strength, sigmaX=sigma)
 
-    # Create sharp pore core (separate RGBA)
+    # Create inner pore core
     core_layer = np.ones_like(ring_layer) * 255
-    cv2.ellipse(
-        core_layer,
-        center,
-        (rw, rh),
-        angle,
-        0,
-        360,
-        color=(45, 45, 45, 255),
-        thickness=-1,
-        lineType=cv2.LINE_AA
-    )
+    cv2.ellipse(core_layer, center, (rw, rh), angle, 0, 360, (45, 45, 45, 255), -1, lineType=cv2.LINE_AA)
 
-    # Blend blurred ring and sharp core using alpha composition
+    # Alpha blending
     ring_rgb = ring_blurred[..., :3].astype(np.float32)
     ring_alpha = ring_blurred[..., 3:] / 255.0
     core_rgb = core_layer[..., :3].astype(np.float32)
@@ -128,7 +128,7 @@ def draw_pore(image, x, y, w, h, angle):
     composite = ring_rgb * ring_alpha + core_rgb * core_alpha * (1 - ring_alpha)
     composite = composite.astype(np.uint8)
 
-    # Downsample and apply to final image
+    # Resize and apply to original image
     final_mask = cv2.resize(composite, (img_w, img_h), interpolation=cv2.INTER_AREA)
     image[:] = cv2.min(image, final_mask)
 
