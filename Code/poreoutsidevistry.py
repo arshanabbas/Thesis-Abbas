@@ -57,53 +57,40 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
 
     cx, cy = int(x * scale), int(y * scale)
-    rw, rh = max(1, w * scale), max(1, h * scale)
+    rw, rh = max(1, int(w * scale)), max(1, int(h * scale))
     center = (cx, cy)
 
-    max_dim = max(w, h)
+    # ===== Step 1: Color Tint Shift for Outer Ring =====
+    base_color = 200
+    tint_range = 15
+    r = random.randint(base_color - tint_range, base_color + tint_range)
+    g = random.randint(base_color - tint_range, base_color + tint_range)
+    b = random.randint(base_color - tint_range, base_color + tint_range)
+    ring_color = (r, g, b)
 
-    # =============================
-    # RING THICKNESS STRATEGY
-    # =============================
-    if max_dim <= 2:
-        # Small pores: softer, thinner, lighter
-        ring_base_thickness = 2 * scale
-        fade_steps = 6
-        base_color = 200
-        thickness_levels = [
-            (1.0, 2 * scale),
-            (0.6, 1.5 * scale),
-            (0.3, 1 * scale)
-        ]
-    else:
-        # Larger pores: randomized start
-        ring_base_thickness = random.choice([2 * scale, 3 * scale])
-        fade_steps = 12
-        base_color = 185
-        thickness_levels = [
-            (1.0, 3 * scale),
-            (0.7, 2 * scale),
-            (0.4, 1 * scale)
-        ]
+    # ===== Ring thickness levels with fading =====
+    thickness_levels = [
+        (1.0, 3 * scale),
+        (0.7, 2 * scale),
+        (0.4, 1 * scale)
+    ]
 
-    # =============================
-    # CREATE RING CANVAS
-    # =============================
     ring_canvas = np.zeros((up_h, up_w, 4), dtype=np.uint8)
+
     arc_start = random.randint(0, 360)
     arc_span = random.randint(200, 230)
     arc_end = arc_start + arc_span
 
+    fade_steps = 15
     fade_range = 360 - arc_span
-    step_angle = max(1, fade_range // fade_steps)
+    step_angle = fade_range // fade_steps if fade_steps else 1
 
-    # Draw visible arc portion (100% opacity)
+    # Full opacity arc
     for opacity, thickness in thickness_levels:
         axes = (int(rw + thickness), int(rh + thickness))
         alpha = int(255 * opacity)
@@ -114,12 +101,12 @@ def draw_pore(image, x, y, w, h, angle):
             angle,
             arc_start,
             arc_end,
-            (base_color, base_color, base_color, alpha),
+            (r, g, b, alpha),
             thickness=-1,
             lineType=cv2.LINE_AA
         )
 
-    # Draw fading segments
+    # Fade-out segment
     fade_start = arc_end
     for i in range(fade_steps):
         local_opacity = 1.0 - (i + 1) / fade_steps
@@ -142,15 +129,15 @@ def draw_pore(image, x, y, w, h, angle):
             angle,
             angle1,
             angle2,
-            (base_color, base_color, base_color, alpha),
+            (r, g, b, alpha),
             thickness=-1,
             lineType=cv2.LINE_AA
         )
 
-    # Apply Gaussian blur (only to alpha)
+    # Gaussian blur on alpha channel
     ring_canvas[:, :, 3] = cv2.GaussianBlur(ring_canvas[:, :, 3], (5, 5), sigmaX=2)
 
-    # Convert to float32 for blending
+    # Composite logic
     ring_rgb = ring_canvas[:, :, :3].astype(np.float32)
     ring_alpha = ring_canvas[:, :, 3].astype(np.float32) / 255.0
     ring_alpha = ring_alpha[:, :, np.newaxis]
@@ -160,12 +147,12 @@ def draw_pore(image, x, y, w, h, angle):
 
     blended = ring_rgb * ring_alpha + base_canvas * (1 - ring_alpha)
 
-    # Draw inner core
+    # Inner core
     core_color = (45, 45, 45)
     core_axes = (int(rw), int(rh))
     cv2.ellipse(blended, center, core_axes, angle, 0, 360, core_color, -1, lineType=cv2.LINE_AA)
 
-    # Resize down and finalize
+    # Finalize
     final = cv2.resize(blended.astype(np.uint8), (img_w, img_h), interpolation=cv2.INTER_AREA)
     image[:] = cv2.min(image, final)
 
