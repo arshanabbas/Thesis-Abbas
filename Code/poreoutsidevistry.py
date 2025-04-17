@@ -57,6 +57,9 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
+    import numpy as np
+    import cv2
+    import random
 
     scale = 6
     img_h, img_w = image.shape[:2]
@@ -66,16 +69,20 @@ def draw_pore(image, x, y, w, h, angle):
     rw, rh = max(1, w * scale), max(1, h * scale)
     center = (cx, cy)
 
-    # Distinguish between small and large pores
-    is_small_pore = max(w, h) <= 2
+    # 📌 Merge-into-core: thickness scales down
+    thickness_levels = [
+        (1.0, 3 * scale),
+        (0.7, 2 * scale),
+        (0.4, 1 * scale)
+    ]
 
-    # Base brightness with slight variation
-    base_color = random.randint(200, 220)
+    # ✅ Ring base color (fixed for now to regain clarity)
+    base_color = 180
 
-    # Initialize ring canvas with alpha
+    # RGBA canvas for the ring
     ring_canvas = np.zeros((up_h, up_w, 4), dtype=np.uint8)
 
-    # Arc start & span
+    # Arc settings
     arc_start = random.randint(0, 360)
     arc_span = random.randint(200, 230)
     arc_end = arc_start + arc_span
@@ -84,11 +91,8 @@ def draw_pore(image, x, y, w, h, angle):
     fade_range = 360 - arc_span
     step_angle = fade_range // fade_steps if fade_steps else 1
 
-    # Set max thickness based on pore size
-    max_thickness = 2 * scale if is_small_pore else random.choice([2 * scale, 3 * scale])
-
-    # Draw visible arc (100% opacity), fading toward core
-    for opacity, thickness in [(1.0, max_thickness), (0.7, int(max_thickness * 0.7)), (0.4, int(max_thickness * 0.4))]:
+    # ✏️ Full visible arc (not fading yet)
+    for opacity, thickness in thickness_levels:
         axes = (int(rw + thickness), int(rh + thickness))
         alpha = int(255 * opacity)
         cv2.ellipse(
@@ -103,26 +107,22 @@ def draw_pore(image, x, y, w, h, angle):
             lineType=cv2.LINE_AA
         )
 
-    # Draw gradual fade with decreasing thickness and alpha
+    # ✏️ Fading arc with thickness taper
     fade_start = arc_end
     for i in range(fade_steps):
         local_opacity = 1.0 - (i + 1) / fade_steps
         if local_opacity <= 0:
             continue
-
-        # Map opacity to thickness
         if local_opacity > 0.7:
-            thickness = max_thickness
+            thickness = 3 * scale
         elif local_opacity > 0.4:
-            thickness = int(max_thickness * 0.7)
+            thickness = 2 * scale
         else:
-            thickness = int(max_thickness * 0.4)
-
+            thickness = 1 * scale
         axes = (int(rw + thickness), int(rh + thickness))
         alpha = int(255 * local_opacity)
         angle1 = fade_start + i * step_angle
         angle2 = min(angle1 + step_angle, 360 + arc_start)
-
         cv2.ellipse(
             ring_canvas,
             center,
@@ -135,25 +135,25 @@ def draw_pore(image, x, y, w, h, angle):
             lineType=cv2.LINE_AA
         )
 
-    # Soft blur on the alpha for better visual blending
+    # ✅ Controlled blur to preserve structure
     ring_canvas[:, :, 3] = cv2.GaussianBlur(ring_canvas[:, :, 3], (5, 5), sigmaX=2)
 
-    # Alpha blending
+    # Blend with white background
     ring_rgb = ring_canvas[:, :, :3].astype(np.float32)
     ring_alpha = ring_canvas[:, :, 3].astype(np.float32) / 255.0
     ring_alpha = ring_alpha[:, :, np.newaxis]
 
-    base_canvas = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
-    base_canvas = base_canvas.astype(np.float32)
+    background = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    background = background.astype(np.float32)
 
-    blended = ring_rgb * ring_alpha + base_canvas * (1 - ring_alpha)
+    blended = ring_rgb * ring_alpha + background * (1 - ring_alpha)
 
-    # Draw the inner pore core
+    # Draw pore core (black)
     core_color = (45, 45, 45)
     core_axes = (int(rw), int(rh))
     cv2.ellipse(blended, center, core_axes, angle, 0, 360, core_color, -1, lineType=cv2.LINE_AA)
 
-    # Resize and apply
+    # Resize back to original
     final = cv2.resize(blended.astype(np.uint8), (img_w, img_h), interpolation=cv2.INTER_AREA)
     image[:] = cv2.min(image, final)
 
