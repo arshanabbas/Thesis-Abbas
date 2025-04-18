@@ -57,105 +57,52 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    import numpy as np
-    import cv2
-    import random
 
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
 
     cx, cy = int(x * scale), int(y * scale)
-    rw, rh = max(1, w * scale), max(1, h * scale)
+    rw, rh = max(1, int(w * scale)), max(1, int(h * scale))
     center = (cx, cy)
 
-    # Ring thickness levels
-    thickness_levels = [
-        (1.0, 3 * scale),
-        (0.7, 2 * scale),
-        (0.4, 1 * scale)
-    ]
+    # Create blank canvas with alpha
+    base = np.zeros((up_h, up_w, 4), dtype=np.uint8)
 
-    # Color base
-    base_color = 180
+    # Ring appearance setup
+    arc_span = 360
+    start_angle = random.randint(0, 360)
+    arc_length = random.randint(210, 240)  # 55–60% visible
+    fade_segments = 6  # More gradual fade
+    angle_step = arc_length // fade_segments
+    current_angle = start_angle
 
-    # Ring canvas with alpha
-    ring_canvas = np.zeros((up_h, up_w, 4), dtype=np.uint8)
+    # Draw gradually fading arc segments
+    for i in range(fade_segments):
+        opacity = int(np.interp(i, [0, fade_segments - 1], [255, 50]))  # From 100% to ~20%
+        thickness = int(np.interp(i, [0, fade_segments - 1], [3 * scale, 1 * scale]))
+        axes = (rw + int(thickness * 0.75), rh + int(thickness * 0.75))
 
-    arc_start = random.randint(0, 360)
-    arc_span = random.randint(200, 230)
-    arc_end = arc_start + arc_span
+        segment_color = (180, 180, 180, opacity)
+        cv2.ellipse(base, center, axes, angle, current_angle, current_angle + angle_step,
+                    segment_color, thickness=thickness, lineType=cv2.LINE_AA)
+        current_angle += angle_step
 
-    fade_steps = 15
-    fade_range = 360 - arc_span
-    step_angle = fade_range // fade_steps if fade_steps else 1
+    # Blur only the ring area
+    blurred = cv2.GaussianBlur(base, (5, 5), sigmaX=2.0, sigmaY=2.0)
 
-    # Draw full ring portion first
-    for opacity, thickness in thickness_levels:
-        axes = (int(rw + thickness), int(rh + thickness))
-        alpha = int(255 * opacity)
-        cv2.ellipse(
-            ring_canvas,
-            center,
-            axes,
-            angle,
-            arc_start,
-            arc_end,
-            (base_color, base_color, base_color, alpha),
-            thickness=-1,
-            lineType=cv2.LINE_AA
-        )
+    # Draw inner core (solid, no alpha)
+    pore_color = (45, 45, 45)
+    core_axes = (rw, rh)
+    cv2.ellipse(blurred, center, core_axes, angle, 0, 360, pore_color + (255,), -1, lineType=cv2.LINE_AA)
 
-    # Draw fading section in small steps
-    fade_start = arc_end
-    for i in range(fade_steps):
-        local_opacity = 1.0 - (i + 1) / fade_steps  # fade from 1.0 → 0.0
-        if local_opacity <= 0:
-            continue
-        if local_opacity > 0.7:
-            thickness = 3 * scale
-        elif local_opacity > 0.4:
-            thickness = 2 * scale
-        else:
-            thickness = 1 * scale
-        axes = (int(rw + thickness), int(rh + thickness))
-        alpha = int(255 * local_opacity)
-        angle1 = fade_start + i * step_angle
-        angle2 = min(angle1 + step_angle, 360 + arc_start)
-        cv2.ellipse(
-            ring_canvas,
-            center,
-            axes,
-            angle,
-            angle1,
-            angle2,
-            (base_color, base_color, base_color, alpha),
-            thickness=-1,
-            lineType=cv2.LINE_AA
-        )
+    # Resize back to image size
+    final = cv2.resize(blurred, (img_w, img_h), interpolation=cv2.INTER_AREA)
 
-    # Gaussian blur on alpha channel
-    ring_canvas[:, :, 3] = cv2.GaussianBlur(ring_canvas[:, :, 3], (5, 5), sigmaX=2)
-
-    # Convert to float for blending
-    ring_rgb = ring_canvas[:, :, :3].astype(np.float32)
-    ring_alpha = ring_canvas[:, :, 3].astype(np.float32) / 255.0
-    ring_alpha = ring_alpha[:, :, np.newaxis]  # match shape for broadcasting
-
-    # Base canvas to composite onto
-    base_canvas = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
-    base_canvas = base_canvas.astype(np.float32)
-
-    blended = ring_rgb * ring_alpha + base_canvas * (1 - ring_alpha)
-
-    # Draw inner core
-    core_color = (45, 45, 45)
-    core_axes = (int(rw), int(rh))
-    cv2.ellipse(blended, center, core_axes, angle, 0, 360, core_color, -1, lineType=cv2.LINE_AA)
-
-    # Finalize
-    final = cv2.resize(blended.astype(np.uint8), (img_w, img_h), interpolation=cv2.INTER_AREA)
-    image[:] = cv2.min(image, final)
+    # Blend using alpha channel
+    rgb, alpha = final[..., :3], final[..., 3:] / 255.0
+    for c in range(3):
+        image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
 
 """def draw_pore(image, x, y, w, h, angle):
     scale = 6
