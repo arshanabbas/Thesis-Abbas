@@ -57,9 +57,6 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    import cv2
-    import numpy as np
-    import random
 
     scale = 6
     img_h, img_w = image.shape[:2]
