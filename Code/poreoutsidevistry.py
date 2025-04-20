@@ -57,9 +57,6 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
-    import numpy as np
-    import cv2
-    import random
 
     scale = 6
     img_h, img_w = image.shape[:2]
@@ -69,60 +66,59 @@ def draw_pore(image, x, y, w, h, angle):
     rw, rh = max(1, int(w * scale)), max(1, int(h * scale))
     center = (cx, cy)
 
-    # Create 4-channel canvas: RGB + Alpha
-    base = np.zeros((up_h, up_w, 4), dtype=np.uint8)
-
-    # === RING CONFIGURATION ===
-    arc_span = random.randint(210, 240)  # Visible portion
-    start_angle = random.randint(0, 360)
+    # === CONFIG ===
     fade_segments = 6
+    arc_span = random.randint(210, 240)
+    arc_start = random.randint(0, 360)
     angle_step = arc_span // fade_segments
-    current_angle = start_angle
 
-    # Adjust ring thickness based on pore size
+    # Dynamic ring thickness
     if max(w, h) <= 2:
         base_thickness = 2 * scale
     else:
         base_thickness = random.choice([2, 3]) * scale
 
-    # === Draw ring with opacity + thickness fade ===
+    # Create separate RGB + alpha channels
+    ring_rgb = np.zeros((up_h, up_w, 3), dtype=np.uint8)
+    ring_alpha = np.zeros((up_h, up_w), dtype=np.uint8)
+
+    # Draw fading arc segments
+    current_angle = arc_start
     for i in range(fade_segments):
-        # Fade opacity and thickness
-        opacity = int(np.interp(i, [0, fade_segments - 1], [255, 40]))  # 100% to 15% fade
+        opacity = int(np.interp(i, [0, fade_segments - 1], [255, 50]))
         thickness = int(np.interp(i, [0, fade_segments - 1], [base_thickness, 1 * scale]))
         axes = (rw + int(thickness * 0.75), rh + int(thickness * 0.75))
+        color = (random.randint(200, 220),) * 3
 
-        # RGB color (no alpha)
-        ring_color = (random.randint(200, 220),) * 3
-
-        # Draw on RGB channels
-        cv2.ellipse(base[..., :3], center, axes, angle, current_angle, current_angle + angle_step,
-                    ring_color, thickness=thickness, lineType=cv2.LINE_AA)
-
-        # Create temporary alpha mask and draw matching alpha arc
-        alpha_mask = np.zeros((up_h, up_w), dtype=np.uint8)
-        cv2.ellipse(alpha_mask, center, axes, angle, current_angle, current_angle + angle_step,
+        cv2.ellipse(ring_rgb, center, axes, angle, current_angle, current_angle + angle_step,
+                    color, thickness=thickness, lineType=cv2.LINE_AA)
+        cv2.ellipse(ring_alpha, center, axes, angle, current_angle, current_angle + angle_step,
                     opacity, thickness=thickness, lineType=cv2.LINE_AA)
-
-        # Merge alpha values (keep brightest for overlap)
-        base[..., 3] = np.maximum(base[..., 3], alpha_mask)
-
         current_angle += angle_step
 
-    # === Apply blur to alpha only for smooth fade ===
-    base[..., 3] = cv2.GaussianBlur(base[..., 3], (5, 5), sigmaX=1.5)
+    # Blur alpha only
+    ring_alpha = cv2.GaussianBlur(ring_alpha, (5, 5), sigmaX=1.5)
 
-    # === Draw solid inner core ===
+    # Convert to float for blending
+    ring_rgb = ring_rgb.astype(np.float32)
+    ring_alpha = ring_alpha.astype(np.float32) / 255.0
+    ring_alpha = ring_alpha[..., np.newaxis]
+
+    # Base canvas
+    base = np.ones((up_h, up_w, 3), dtype=np.uint8) * 255
+    base = base.astype(np.float32)
+
+    # Composite ring
+    blended = ring_rgb * ring_alpha + base * (1 - ring_alpha)
+
+    # Draw inner core
     core_color = (45, 45, 45)
-    cv2.ellipse(base, center, (rw, rh), angle, 0, 360, core_color + (255,), -1, lineType=cv2.LINE_AA)
+    core_axes = (rw, rh)
+    cv2.ellipse(blended, center, core_axes, angle, 0, 360, core_color, -1, lineType=cv2.LINE_AA)
 
-    # === Resize and blend onto original image ===
-    final = cv2.resize(base, (img_w, img_h), interpolation=cv2.INTER_AREA)
-    rgb, alpha = final[..., :3], final[..., 3:] / 255.0
-
-    for c in range(3):
-        image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
-
+    # Resize and apply to original image
+    final = cv2.resize(blended.astype(np.uint8), (img_w, img_h), interpolation=cv2.INTER_AREA)
+    image[:] = cv2.min(image, final)
 
 """def draw_pore(image, x, y, w, h, angle):
 
