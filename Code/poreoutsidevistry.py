@@ -57,6 +57,10 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle):
+    import numpy as np
+    import cv2
+    import random
+
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
@@ -65,56 +69,59 @@ def draw_pore(image, x, y, w, h, angle):
     rw, rh = max(1, int(w * scale)), max(1, int(h * scale))
     center = (cx, cy)
 
-    # Create blank canvas with alpha
+    # Create 4-channel canvas: RGB + Alpha
     base = np.zeros((up_h, up_w, 4), dtype=np.uint8)
 
-    # Determine starting thickness for small pores
-    max_dim = max(w, h)
-    start_thickness = 2 * scale if max_dim <= 2 else 3 * scale
-
-    # Arc span settings
-    total_arc = 360
-    arc_length = random.randint(210, 240)
+    # === RING CONFIGURATION ===
+    arc_span = random.randint(210, 240)  # Visible portion
     start_angle = random.randint(0, 360)
-    remaining_arc = arc_length
+    fade_segments = 6
+    angle_step = arc_span // fade_segments
     current_angle = start_angle
 
-    fade_segments = 6
-    opacities = np.linspace(255, 50, fade_segments).astype(int)
+    # Adjust ring thickness based on pore size
+    if max(w, h) <= 2:
+        base_thickness = 2 * scale
+    else:
+        base_thickness = random.choice([2, 3]) * scale
 
-    # Create randomized segment widths that sum to arc_length
-    random_weights = np.random.rand(fade_segments)
-    segment_widths = (random_weights / random_weights.sum() * arc_length).astype(int)
-
-    # Adjust the last segment to ensure exact total
-    segment_widths[-1] += arc_length - segment_widths.sum()
-
+    # === Draw ring with opacity + thickness fade ===
     for i in range(fade_segments):
-        opacity = opacities[i]
-        thickness = int(np.interp(opacity, [50, 255], [1 * scale, start_thickness]))
+        # Fade opacity and thickness
+        opacity = int(np.interp(i, [0, fade_segments - 1], [255, 40]))  # 100% to 15% fade
+        thickness = int(np.interp(i, [0, fade_segments - 1], [base_thickness, 1 * scale]))
         axes = (rw + int(thickness * 0.75), rh + int(thickness * 0.75))
-        segment_color = (180, 180, 180, opacity)
-        angle_span = segment_widths[i]
 
-        cv2.ellipse(base, center, axes, angle, current_angle, current_angle + angle_span,
-                    segment_color, thickness=thickness, lineType=cv2.LINE_AA)
-        current_angle += angle_span
+        # RGB color (no alpha)
+        ring_color = (random.randint(200, 220),) * 3
 
-    # Apply Gaussian blur to the alpha channel only
-    base[:, :, 3] = cv2.GaussianBlur(base[:, :, 3], (3, 3), sigmaX=1.0)
+        # Draw on RGB channels
+        cv2.ellipse(base[..., :3], center, axes, angle, current_angle, current_angle + angle_step,
+                    ring_color, thickness=thickness, lineType=cv2.LINE_AA)
 
-    # Draw the inner pore core
-    core_color = (45, 45, 45, 255)
-    core_axes = (rw, rh)
-    cv2.ellipse(base, center, core_axes, angle, 0, 360, core_color, -1, lineType=cv2.LINE_AA)
+        # Create temporary alpha mask and draw matching alpha arc
+        alpha_mask = np.zeros((up_h, up_w), dtype=np.uint8)
+        cv2.ellipse(alpha_mask, center, axes, angle, current_angle, current_angle + angle_step,
+                    opacity, thickness=thickness, lineType=cv2.LINE_AA)
 
-    # Resize to original image dimensions
+        # Merge alpha values (keep brightest for overlap)
+        base[..., 3] = np.maximum(base[..., 3], alpha_mask)
+
+        current_angle += angle_step
+
+    # === Apply blur to alpha only for smooth fade ===
+    base[..., 3] = cv2.GaussianBlur(base[..., 3], (5, 5), sigmaX=1.5)
+
+    # === Draw solid inner core ===
+    core_color = (45, 45, 45)
+    cv2.ellipse(base, center, (rw, rh), angle, 0, 360, core_color + (255,), -1, lineType=cv2.LINE_AA)
+
+    # === Resize and blend onto original image ===
     final = cv2.resize(base, (img_w, img_h), interpolation=cv2.INTER_AREA)
-
-    # Blend using alpha channel
     rgb, alpha = final[..., :3], final[..., 3:] / 255.0
+
     for c in range(3):
-        image[..., c] = (alpha * rgb[..., c] + (1 - alpha) * image[..., c]).astype(np.uint8)
+        image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
 
 
 """def draw_pore(image, x, y, w, h, angle):
