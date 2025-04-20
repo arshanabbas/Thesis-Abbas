@@ -157,7 +157,7 @@ def draw_pore(image, x, y, w, h, angle):
     rgb, alpha = final[..., :3], final[..., 3:] / 255.0
     for c in range(3):
         image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
-""""
+"""
 # ----------------------- Pore and Cluster Generation -----------------------
 def generate_balanced_pores_with_labels(polygon, img_shape):
     pores, labels = [], []
