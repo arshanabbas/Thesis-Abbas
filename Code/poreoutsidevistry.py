@@ -57,7 +57,6 @@ def is_far_from_existing(x, y, r, placed_pores):
     return True
 
 def draw_pore(image, x, y, w, h, angle, base_arc_start):
-
     scale = 6
     img_h, img_w = image.shape[:2]
     up_w, up_h = img_w * scale, img_h * scale
@@ -66,7 +65,7 @@ def draw_pore(image, x, y, w, h, angle, base_arc_start):
     rw, rh = max(1, int(w * scale)), max(1, int(h * scale))
     center = (cx, cy)
 
-    # --- Determine thickness rules based on core radius ---
+    # === Determine thickness rules ===
     core_radius = max(w, h)
     if core_radius <= 2:
         thick_start, thick_end = 2 * scale, 1 * scale
@@ -75,61 +74,119 @@ def draw_pore(image, x, y, w, h, angle, base_arc_start):
     else:
         thick_start, thick_end = 3 * scale, 1 * scale
 
-    # --- Shared directional arc logic with natural jitter ---
-    max_deviation = 0.2  # 20%
-    jitter = int(random.uniform(-max_deviation, max_deviation) * 360)
+    # === Gradient jitter based on Y position ===
+    relative_y = y / img_h
+    max_deviation = 0.1
+    jitter = int((random.uniform(-1, 1) * max_deviation) * 360 * relative_y)
     arc_start = (base_arc_start + jitter) % 360
 
-    # Randomize arc length only for pores radius ≥ 3
+    # === Arc length based on radius ===
     if core_radius > 2:
-        arc_length = random.randint(180, 270)  # 50%–75%
+        arc_length = random.randint(180, 270)
     else:
-        arc_length = 240  # standard for small pores
+        arc_length = 240
 
     arc_end = arc_start + arc_length
     fade_segments = 6
     angle_step = arc_length // fade_segments
 
-    # --- Create canvas ---
     base = np.zeros((up_h, up_w, 4), dtype=np.uint8)
 
-    # --- Draw fading segments of the ring ---
     for i in range(fade_segments):
         opacity = int(np.interp(i, [0, fade_segments - 1], [255, 50]))
         thickness = int(np.interp(i, [0, fade_segments - 1], [thick_start, thick_end]))
         axes = (rw + int(thickness * 0.75), rh + int(thickness * 0.75))
-        segment_color = (180, 180, 180, opacity)
+        color = (180, 180, 180, opacity)
+        sa = arc_start + i * angle_step
+        ea = sa + angle_step
 
-        start_angle = arc_start + i * angle_step
-        end_angle = start_angle + angle_step
+        cv2.ellipse(base, center, axes, angle, sa, ea, color, thickness=thickness, lineType=cv2.LINE_AA)
 
-        cv2.ellipse(
-            base,
-            center,
-            axes,
-            angle,
-            start_angle,
-            end_angle,
-            segment_color,
-            thickness=thickness,
-            lineType=cv2.LINE_AA
-        )
-
-    # --- Soften ring with Gaussian blur ---
     base[:, :, 3] = cv2.GaussianBlur(base[:, :, 3], (5, 5), sigmaX=2.0)
+    cv2.ellipse(base, center, (rw, rh), angle, 0, 360, (45, 45, 45, 255), -1, lineType=cv2.LINE_AA)
 
-    # --- Draw solid inner core ---
-    pore_color = (45, 45, 45)
-    cv2.ellipse(base, center, (rw, rh), angle, 0, 360, pore_color + (255,), -1, lineType=cv2.LINE_AA)
-
-    # --- Resize back to original ---
     final = cv2.resize(base, (img_w, img_h), interpolation=cv2.INTER_AREA)
-
-    # --- Blend using alpha channel ---
-    rgb = final[..., :3]
-    alpha = final[..., 3:] / 255.0
+    rgb, alpha = final[..., :3], final[..., 3:] / 255.0
     for c in range(3):
         image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
+
+# ----------------------- Pore and Cluster Generation -----------------------
+def generate_balanced_pores_with_labels(polygon, img_shape):
+    pores, labels = [], []
+    polygon_np = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
+    x_min, y_min = np.min(polygon_np, axis=0)[0]
+    x_max, y_max = np.max(polygon_np, axis=0)[0]
+
+    mask = np.zeros((img_shape[0], img_shape[1]), dtype=np.uint8)
+    cv2.fillPoly(mask, [polygon_np], 255)
+    margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
+
+    placed_pores = []
+    attempts = 0
+    while len(pores) < random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES) and attempts < 2000:
+        attempts += 1
+        x, y = random.randint(x_min, x_max), random.randint(y_min, y_max)
+        w, h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+        angle = random.randint(0, 180)
+        r = max(w, h)
+        if mask[y, x] == 255 and margin_mask[y, x] == 255:
+            if is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
+                pores.append((x, y, w, h, angle))
+                placed_pores.append((x, y, r))
+                bx, by, bw, bh = convert_to_yolo_bbox(x, y, w + PORE_PADDING, h + PORE_PADDING, img_shape[1], img_shape[0])
+                labels.append((PORE_CLASS_ID, bx, by, bw, bh))
+
+    return pores, labels
+
+# ----------------------- Main Function -----------------------
+def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, output_labels_dir):
+    os.makedirs(output_images_dir, exist_ok=True)
+    os.makedirs(output_labels_dir, exist_ok=True)
+
+    for annotation_file in os.listdir(annotation_dir):
+        if not annotation_file.endswith(".txt"):
+            continue
+
+        image_name = os.path.splitext(annotation_file)[0] + ".jpg"
+        image_path = os.path.join(image_dir, image_name)
+        annotation_path = os.path.join(annotation_dir, annotation_file)
+
+        if not os.path.exists(image_path):
+            print(f"Image {image_name} not found. Skipping...")
+            continue
+
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        label_list = []
+        base_arc_start = random.randint(0, 359)
+
+        with open(annotation_path, 'r') as f:
+            for line in f:
+                if int(line.strip().split()[0]) != 3:
+                    continue
+                polygon = list(map(float, line.strip().split()[1:]))
+                points = [(int(polygon[i] * image.shape[1]), int(polygon[i + 1] * image.shape[0])) for i in range(0, len(polygon), 2)]
+                pores, labels = generate_balanced_pores_with_labels(points, image.shape)
+                print(f"{image_name} → Generated {len(pores)} pores")
+                label_list.extend(labels)
+                for (x, y, w, h, angle) in pores:
+                    draw_pore(image, x, y, w, h, angle, base_arc_start)
+
+        cv2.imwrite(os.path.join(output_images_dir, image_name), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+        if label_list:
+            save_yolo_labels(output_labels_dir, image_name, label_list)
+
+# ----------------------- Execution -----------------------
+dirs = {
+    "image_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images",
+    "annotation_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8",
+    "output_images_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/image",
+    "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
+}
+
+if __name__ == '__main__':
+    visualize_class3_and_annotate(**dirs)
+
 
 """def draw_pore(image, x, y, w, h, angle):
 
@@ -243,78 +300,3 @@ def draw_pore(image, x, y, w, h, angle, base_arc_start):
     for c in range(3):
         image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
 """
-# ----------------------- Pore and Cluster Generation -----------------------
-def generate_balanced_pores_with_labels(polygon, img_shape):
-    pores, labels = [], []
-    polygon_np = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
-    x_min, y_min = np.min(polygon_np, axis=0)[0]
-    x_max, y_max = np.max(polygon_np, axis=0)[0]
-
-    mask = np.zeros((img_shape[0], img_shape[1]), dtype=np.uint8)
-    cv2.fillPoly(mask, [polygon_np], 255)
-    margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
-
-    placed_pores = []
-    attempts = 0
-    while len(pores) < random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES) and attempts < 2000:
-        attempts += 1
-        x, y = random.randint(x_min, x_max), random.randint(y_min, y_max)
-        w, h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
-        angle = random.randint(0, 180)
-        r = max(w, h)
-        if mask[y, x] == 255 and margin_mask[y, x] == 255:
-            if is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
-                pores.append((x, y, w, h, angle))
-                placed_pores.append((x, y, r))
-                bx, by, bw, bh = convert_to_yolo_bbox(x, y, w + PORE_PADDING, h + PORE_PADDING, img_shape[1], img_shape[0])
-                labels.append((PORE_CLASS_ID, bx, by, bw, bh))
-
-    return pores, labels
-
-# ----------------------- Main Function -----------------------
-def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, output_labels_dir):
-    os.makedirs(output_images_dir, exist_ok=True)
-    os.makedirs(output_labels_dir, exist_ok=True)
-
-    for annotation_file in os.listdir(annotation_dir):
-        if not annotation_file.endswith(".txt"):
-            continue
-
-        image_name = os.path.splitext(annotation_file)[0] + ".jpg"
-        image_path = os.path.join(image_dir, image_name)
-        annotation_path = os.path.join(annotation_dir, annotation_file)
-
-        if not os.path.exists(image_path):
-            print(f"Image {image_name} not found. Skipping...")
-            continue
-
-        image = cv2.imread(image_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        label_list = []
-
-        with open(annotation_path, 'r') as f:
-            for line in f:
-                if int(line.strip().split()[0]) != 3:
-                    continue
-                polygon = list(map(float, line.strip().split()[1:]))
-                points = [(int(polygon[i] * image.shape[1]), int(polygon[i + 1] * image.shape[0])) for i in range(0, len(polygon), 2)]
-                pores, labels = generate_balanced_pores_with_labels(points, image.shape)
-                print(f"{image_name} → Generated {len(pores)} pores")
-                label_list.extend(labels)
-                for (x, y, w, h, angle) in pores:
-                    draw_pore(image, x, y, w, h, angle)
-
-        cv2.imwrite(os.path.join(output_images_dir, image_name), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-        if label_list:
-            save_yolo_labels(output_labels_dir, image_name, label_list)
-
-# ----------------------- Execution -----------------------
-dirs = {
-    "image_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images",
-    "annotation_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8",
-    "output_images_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/image",
-    "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
-}
-
-if __name__ == '__main__':
-    visualize_class3_and_annotate(**dirs)
