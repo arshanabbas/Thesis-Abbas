@@ -55,7 +55,6 @@ def is_far_from_existing(x, y, r, placed_pores):
         if math.hypot(x - px, y - py) < (r + pr + MIN_DISTANCE_BETWEEN_PORES):
             return False
     return True
-
 def draw_pore(image, x, y, w, h, angle, base_arc_start):
     scale = 6
     img_h, img_w = image.shape[:2]
@@ -74,13 +73,12 @@ def draw_pore(image, x, y, w, h, angle, base_arc_start):
     else:
         thick_start, thick_end = 3 * scale, 1 * scale
 
-    # === Gradient jitter based on Y position ===
+    # === Arc angle strategy ===
     relative_y = y / img_h
-    max_deviation = 0.1
+    max_deviation = 0.2
     jitter = int((random.uniform(-1, 1) * max_deviation) * 360 * relative_y)
     arc_start = (base_arc_start + jitter) % 360
 
-    # === Arc length based on radius ===
     if core_radius > 2:
         arc_length = random.randint(180, 270)
     else:
@@ -90,21 +88,44 @@ def draw_pore(image, x, y, w, h, angle, base_arc_start):
     fade_segments = 6
     angle_step = arc_length // fade_segments
 
+    # === Create base with alpha ===
     base = np.zeros((up_h, up_w, 4), dtype=np.uint8)
 
+    # === Draw fading segments ===
     for i in range(fade_segments):
+        # Opacity fades
         opacity = int(np.interp(i, [0, fade_segments - 1], [255, 50]))
         thickness = int(np.interp(i, [0, fade_segments - 1], [thick_start, thick_end]))
-        axes = (rw + int(thickness * 0.75), rh + int(thickness * 0.75))
+
+        # First segment follows core-direction strategy
+        if i == 0:
+            axes = (rw + int(thickness * 0.5), rh + int(thickness * 0.5))  # closer to core
+        else:
+            axes = (rw + int(thickness * 0.75), rh + int(thickness * 0.75))
+
         color = (180, 180, 180, opacity)
         sa = arc_start + i * angle_step
         ea = sa + angle_step
 
-        cv2.ellipse(base, center, axes, angle, sa, ea, color, thickness=thickness, lineType=cv2.LINE_AA)
+        cv2.ellipse(
+            base,
+            center,
+            axes,
+            angle,
+            sa,
+            ea,
+            color,
+            thickness=thickness,
+            lineType=cv2.LINE_AA
+        )
 
+    # === Blur alpha only ===
     base[:, :, 3] = cv2.GaussianBlur(base[:, :, 3], (5, 5), sigmaX=2.0)
+
+    # === Draw pore core ===
     cv2.ellipse(base, center, (rw, rh), angle, 0, 360, (45, 45, 45, 255), -1, lineType=cv2.LINE_AA)
 
+    # === Downscale and blend ===
     final = cv2.resize(base, (img_w, img_h), interpolation=cv2.INTER_AREA)
     rgb, alpha = final[..., :3], final[..., 3:] / 255.0
     for c in range(3):
