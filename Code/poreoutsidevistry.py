@@ -73,7 +73,7 @@ def draw_pore(image, x, y, w, h, angle):
     fade_segments = 6
 
     # === Logic for small and large pores ===
-    if max_core_radius <= 3:
+    if max_core_radius <= 2:
         arc_length = 216  # fixed ~60% arc
         thick_start, thick_end = 2 * scale, 1 * scale
     else:
