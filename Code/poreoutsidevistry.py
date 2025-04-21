@@ -56,7 +56,67 @@ def is_far_from_existing(x, y, r, placed_pores):
             return False
     return True
 
-def draw_pore(image, x, y, w, h, angle):
+def draw_pore(image, x, y, w, h, angle, base_arc_start):
+
+    scale = 6
+    img_h, img_w = image.shape[:2]
+    up_w, up_h = img_w * scale, img_h * scale
+
+    cx, cy = int(x * scale), int(y * scale)
+    rw, rh = max(1, int(w * scale)), max(1, int(h * scale))
+    center = (cx, cy)
+
+    # Determine thickness range based on pore size
+    if max(w, h) <= 2:
+        thick_start, thick_end = 2 * scale, 1 * scale
+    else:
+        thick_start, thick_end = int(2.5 * scale), 1 * scale
+
+    # Arc settings
+    arc_length = random.randint(180, 270)  # 50% to 75% of full circle
+
+    # 🔄 Image-level consistent arc direction with subtle randomness
+    local_deviation = random.uniform(-15, 15)  # per-pore deviation
+    start_angle = (base_arc_start + local_deviation) % 360
+
+    fade_segments = 6
+    angle_step = arc_length // fade_segments
+    current_angle = start_angle
+
+    # Create blank canvas with alpha
+    base = np.zeros((up_h, up_w, 4), dtype=np.uint8)
+
+    # Draw fading arc segments
+    for i in range(fade_segments):
+        opacity = int(np.interp(i, [0, fade_segments - 1], [255, 50]))
+        thickness = int(np.interp(i, [0, fade_segments - 1], [thick_start, thick_end]))
+        axes = (rw + int(thickness * 0.75), rh + int(thickness * 0.75))
+
+        segment_color = (180, 180, 180, opacity)
+        cv2.ellipse(
+            base, center, axes, angle,
+            current_angle, current_angle + angle_step,
+            segment_color, thickness=thickness, lineType=cv2.LINE_AA
+        )
+        current_angle += angle_step
+
+    # Blur only the ring area
+    blurred = cv2.GaussianBlur(base, (5, 5), sigmaX=2.0, sigmaY=2.0)
+
+    # Draw inner core (solid, no alpha)
+    pore_color = (45, 45, 45)
+    core_axes = (rw, rh)
+    cv2.ellipse(blurred, center, core_axes, angle, 0, 360, pore_color + (255,), -1, lineType=cv2.LINE_AA)
+
+    # Resize back to image scale
+    final = cv2.resize(blurred, (img_w, img_h), interpolation=cv2.INTER_AREA)
+
+    # Alpha blend with base image
+    rgb, alpha = final[..., :3], final[..., 3:] / 255.0
+    for c in range(3):
+        image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
+
+"""def draw_pore(image, x, y, w, h, angle):
 
     scale = 6
     img_h, img_w = image.shape[:2]
@@ -119,7 +179,7 @@ def draw_pore(image, x, y, w, h, angle):
 
     for c in range(3):
         image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
-
+"""
 """def draw_pore(image, x, y, w, h, angle):
 
     scale = 6
