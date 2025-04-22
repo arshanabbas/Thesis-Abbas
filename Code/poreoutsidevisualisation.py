@@ -107,9 +107,11 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     polygon_np = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
     x_min, y_min = np.min(polygon_np, axis=0)[0]
     x_max, y_max = np.max(polygon_np, axis=0)[0]
+
     mask = np.zeros((img_shape[0], img_shape[1]), dtype=np.uint8)
     cv2.fillPoly(mask, [polygon_np], 255)
     margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
+
     placed_pores = []
     while len(pores) < random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES):
         x, y = random.randint(x_min, x_max), random.randint(y_min, y_max)
@@ -120,19 +122,26 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
             if is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
                 pores.append((x, y, w, h, angle))
                 placed_pores.append((x, y, r))
+
     clusters = group_pores_into_clusters(pores)
-    clustered_ids = {id(p) for cluster in clusters.values() for p in cluster}
+    clustered_set = set(p for cluster in clusters.values() for p in cluster)
+
     for cluster in clusters.values():
         xs, ys = zip(*[(p[0], p[1]) for p in cluster])
-        xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
+        xmin, xmax = min(xs), max(xs)
+        ymin, ymax = min(ys), max(ys)
         cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
-        w, h = (xmax - xmin) / 2 + PORE_PADDING, (ymax - ymin) / 2 + PORE_PADDING
+        w = (xmax - xmin) / 2 + PORE_PADDING
+        h = (ymax - ymin) / 2 + PORE_PADDING
         labels.append((PORE_NEST_CLASS_ID, *convert_to_yolo_bbox(cx, cy, w, h, img_shape[1], img_shape[0])))
-    for (x, y, w, h, angle) in pores:
-        if id((x, y, w, h, angle)) not in clustered_ids:
+
+    for p in pores:
+        if p not in clustered_set:
+            x, y, w, h, angle = p
             bx, by, bw, bh = convert_to_yolo_bbox(x, y, w + PORE_PADDING, h + PORE_PADDING, img_shape[1], img_shape[0])
             labels.append((PORE_CLASS_ID, bx, by, bw, bh))
-    return pores, labels, clustered_ids
+
+    return pores, labels, clustered_set
 
 # ----------------------- Main Execution -----------------------
 def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, output_labels_dir):
