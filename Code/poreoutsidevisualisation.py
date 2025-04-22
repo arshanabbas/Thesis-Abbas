@@ -119,24 +119,32 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     total_pores = random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES)
     num_clusters = random.randint(MIN_CLUSTERS, MAX_CLUSTERS)
 
-    cluster_centers = []
-    while len(cluster_centers) < num_clusters:
-        cx, cy = random.randint(x_min, x_max), random.randint(y_min, y_max)
-        if mask[cy, cx] == 255 and margin_mask[cy, cx] == 255:
-            too_close = any(math.hypot(cx - pcx, cy - pcy) < MIN_DISTANCE_BETWEEN_CLUSTERS for pcx, pcy in cluster_centers)
-            if not too_close:
-                cluster_centers.append((cx, cy))
-
     placed_pores = []
+    cluster_centers = []
     cluster_bounding_boxes = []
     cluster_regions = []
 
-    # Step 1: Generate clustered pores
-    for cx, cy in cluster_centers:
+    # --- Step 1: Generate valid porenests ---
+    valid_clusters = 0
+    cluster_attempts = 0
+    max_cluster_attempts = 1000
+
+    while valid_clusters < num_clusters and cluster_attempts < max_cluster_attempts:
+        cx, cy = random.randint(x_min, x_max), random.randint(y_min, y_max)
+        cluster_attempts += 1
+
+        if mask[cy, cx] != 255 or margin_mask[cy, cx] != 255:
+            continue
+
+        too_close = any(math.hypot(cx - pcx, cy - pcy) < MIN_DISTANCE_BETWEEN_CLUSTERS for pcx, pcy in cluster_centers)
+        if too_close:
+            continue
+
         cluster_pores = []
-        pores_in_this_cluster = random.randint(MIN_CLUSTER_PORE_COUNT, MAX_CLUSTER_PORE_COUNT)
-        attempts = 0
-        while len(cluster_pores) < pores_in_this_cluster and attempts < 150:
+        cluster_pore_target = random.randint(MIN_CLUSTER_PORE_COUNT, MAX_CLUSTER_PORE_COUNT)
+        inner_attempts = 0
+
+        while len(cluster_pores) < cluster_pore_target and inner_attempts < 200:
             angle_deg = random.uniform(0, 360)
             radius = random.uniform(5, 15)
             x = int(cx + radius * math.cos(math.radians(angle_deg)))
@@ -151,11 +159,13 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
                     if is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
                         cluster_pores.append((x, y, w, h, angle))
                         placed_pores.append((x, y, r))
-            attempts += 1
+            inner_attempts += 1
 
-        pores.extend(cluster_pores)
+        if len(cluster_pores) >= MIN_CLUSTER_PORE_COUNT:
+            pores.extend(cluster_pores)
+            cluster_centers.append((cx, cy))
+            valid_clusters += 1
 
-        if cluster_pores:
             xs, ys = zip(*[(px, py) for (px, py, *_rest) in cluster_pores])
             xmin, xmax = min(xs), max(xs)
             ymin, ymax = min(ys), max(ys)
@@ -179,10 +189,12 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
             cluster_bounding_boxes.append((xmin, ymin, xmax, ymax))
             cluster_regions.append((cx, cy))
 
-    # Step 2: Generate scattered pores with spacing from clusters
+    # --- Step 2: Add scattered pores (not too close to porenests) ---
     scattered_pores_needed = total_pores - len(pores)
-    attempts = 0
-    while scattered_pores_needed > 0 and attempts < 1500:
+    scatter_attempts = 0
+    max_scatter_attempts = 1500
+
+    while scattered_pores_needed > 0 and scatter_attempts < max_scatter_attempts:
         x = random.randint(x_min, x_max)
         y = random.randint(y_min, y_max)
         w = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
@@ -198,7 +210,7 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
                 bx, by, bw, bh = convert_to_yolo_bbox(x, y, w + PORE_PADDING, h + PORE_PADDING, img_shape[1], img_shape[0])
                 labels.append((PORE_CLASS_ID, bx, by, bw, bh))
                 scattered_pores_needed -= 1
-        attempts += 1
+        scatter_attempts += 1
 
     return pores, labels, set()
 
