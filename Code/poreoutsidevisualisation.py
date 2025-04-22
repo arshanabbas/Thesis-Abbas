@@ -20,6 +20,8 @@ BOUNDARY_MARGIN = 3
 PORE_CLASS_ID = 0
 PORE_NEST_CLASS_ID = 1
 PORE_PADDING = 5
+CLUSTER_BOX_PADDING = 10
+
 
 # ----------------------- Helper Functions -----------------------
 def is_valid_pore_shape(w, h):
