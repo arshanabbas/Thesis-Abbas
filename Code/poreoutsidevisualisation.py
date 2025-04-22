@@ -112,36 +112,80 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     cv2.fillPoly(mask, [polygon_np], 255)
     margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
 
+    total_pores = random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES)
+    num_clusters = random.randint(MIN_CLUSTERS, MAX_CLUSTERS)
+    pores_per_cluster = 3  # minimum to define a porenest
+    clustered_pores_needed = num_clusters * pores_per_cluster
+    scattered_pores_needed = total_pores - clustered_pores_needed
+
     placed_pores = []
-    while len(pores) < random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES):
-        x, y = random.randint(x_min, x_max), random.randint(y_min, y_max)
-        w, h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS), random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+    cluster_centers = []
+
+    # --- Step 1: Place valid cluster centers ---
+    while len(cluster_centers) < num_clusters:
+        cx, cy = random.randint(x_min, x_max), random.randint(y_min, y_max)
+        if mask[cy, cx] == 255 and margin_mask[cy, cx] == 255:
+            too_close = any(math.hypot(cx - pcx, cy - pcy) < MIN_DISTANCE_BETWEEN_CLUSTERS for pcx, pcy in cluster_centers)
+            if not too_close:
+                cluster_centers.append((cx, cy))
+
+    # --- Step 2: Generate clustered pores around each center ---
+    cluster_bounding_boxes = []
+    for cx, cy in cluster_centers:
+        cluster_pores = []
+        attempts = 0
+        while len(cluster_pores) < pores_per_cluster and attempts < 100:
+            angle_deg = random.uniform(0, 360)
+            radius = random.uniform(5, 15)
+            x = int(cx + radius * math.cos(math.radians(angle_deg)))
+            y = int(cy + radius * math.sin(math.radians(angle_deg)))
+            w = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+            h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+            angle = random.randint(0, 180)
+            r = max(w, h)
+
+            if 0 <= x < img_shape[1] and 0 <= y < img_shape[0]:
+                if mask[y, x] == 255 and margin_mask[y, x] == 255:
+                    if is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
+                        cluster_pores.append((x, y, w, h, angle))
+                        placed_pores.append((x, y, r))
+            attempts += 1
+
+        pores.extend(cluster_pores)
+
+        if cluster_pores:
+            xs, ys = zip(*[(px, py) for (px, py, *_rest) in cluster_pores])
+            xmin, xmax = min(xs), max(xs)
+            ymin, ymax = min(ys), max(ys)
+            cx_box = (xmin + xmax) / 2
+            cy_box = (ymin + ymax) / 2
+            box_w = (xmax - xmin) / 2 + PORE_PADDING
+            box_h = (ymax - ymin) / 2 + PORE_PADDING
+            labels.append((PORE_NEST_CLASS_ID, *convert_to_yolo_bbox(cx_box, cy_box, box_w, box_h, img_shape[1], img_shape[0])))
+            cluster_bounding_boxes.append((xmin, ymin, xmax, ymax))
+
+    # --- Step 3: Add scattered (non-clustered) pores ---
+    attempts = 0
+    while scattered_pores_needed > 0 and attempts < 1000:
+        x = random.randint(x_min, x_max)
+        y = random.randint(y_min, y_max)
+        w = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
+        h = random.randint(MIN_PORE_RADIUS, MAX_PORE_RADIUS)
         angle = random.randint(0, 180)
         r = max(w, h)
+
         if mask[y, x] == 255 and margin_mask[y, x] == 255:
-            if is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
+            # Check if far from clusters
+            inside_cluster = any(xmin <= x <= xmax and ymin <= y <= ymax for (xmin, ymin, xmax, ymax) in cluster_bounding_boxes)
+            if not inside_cluster and is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
                 pores.append((x, y, w, h, angle))
                 placed_pores.append((x, y, r))
+                bx, by, bw, bh = convert_to_yolo_bbox(x, y, w + PORE_PADDING, h + PORE_PADDING, img_shape[1], img_shape[0])
+                labels.append((PORE_CLASS_ID, bx, by, bw, bh))
+                scattered_pores_needed -= 1
+        attempts += 1
 
-    clusters = group_pores_into_clusters(pores)
-    clustered_set = set(p for cluster in clusters.values() for p in cluster)
-
-    for cluster in clusters.values():
-        xs, ys = zip(*[(p[0], p[1]) for p in cluster])
-        xmin, xmax = min(xs), max(xs)
-        ymin, ymax = min(ys), max(ys)
-        cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
-        w = (xmax - xmin) / 2 + PORE_PADDING
-        h = (ymax - ymin) / 2 + PORE_PADDING
-        labels.append((PORE_NEST_CLASS_ID, *convert_to_yolo_bbox(cx, cy, w, h, img_shape[1], img_shape[0])))
-
-    for p in pores:
-        if p not in clustered_set:
-            x, y, w, h, angle = p
-            bx, by, bw, bh = convert_to_yolo_bbox(x, y, w + PORE_PADDING, h + PORE_PADDING, img_shape[1], img_shape[0])
-            labels.append((PORE_CLASS_ID, bx, by, bw, bh))
-
-    return pores, labels, clustered_set
+    return pores, labels, set()
 
 # ----------------------- Main Execution -----------------------
 def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, output_labels_dir):
