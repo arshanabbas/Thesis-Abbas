@@ -138,11 +138,10 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         if try_place_pore(x, y, w, h, angle):
             size_ranges.pop()
 
-    for (x, y, w, h, angle) in pores:
-        padded_w = w + PORE_PADDING
-        padded_h = h + PORE_PADDING
-        bx, by, bw, bh = convert_to_yolo_bbox(x, y, padded_w, padded_h, img_shape[1], img_shape[0])
-        labels.append((PORE_CLASS_ID, bx, by, bw, bh))
+    # ---------------------------
+    # NEW: Create Porenest boxes and filter contained Pores
+    # ---------------------------
+    porenests_pixel_boxes = []
 
     for cx, cy in cluster_centers:
         cluster_related = [p for p in pores if math.hypot(p[0] - cx, p[1] - cy) < 25]
@@ -153,10 +152,23 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         max_x = min(img_shape[1], max(xs) + max(ws) + CLUSTER_PADDING)
         min_y = max(0, min(ys) - max(hs) - CLUSTER_PADDING)
         max_y = min(img_shape[0], max(ys) + max(hs) + CLUSTER_PADDING)
-        cx, cy = (min_x + max_x) / 2, (min_y + max_y) / 2
+
+        porenests_pixel_boxes.append((min_x, min_y, max_x, max_y))
+
+        cx_box, cy_box = (min_x + max_x) / 2, (min_y + max_y) / 2
         cluster_w, cluster_h = max_x - min_x, max_y - min_y
-        bx, by, bw, bh = convert_to_yolo_bbox(cx, cy, cluster_w / 2, cluster_h / 2, img_shape[1], img_shape[0])
+        bx, by, bw, bh = convert_to_yolo_bbox(cx_box, cy_box, cluster_w / 2, cluster_h / 2, img_shape[1], img_shape[0])
         labels.append((PORE_NEST_CLASS_ID, bx, by, bw, bh))
+
+    # Only label pores that are NOT inside any porenest box
+    for (x, y, w, h, angle) in pores:
+        inside_any_nest = any(min_x <= x <= max_x and min_y <= y <= max_y for (min_x, min_y, max_x, max_y) in porenests_pixel_boxes)
+        if inside_any_nest:
+            continue
+        padded_w = w + PORE_PADDING
+        padded_h = h + PORE_PADDING
+        bx, by, bw, bh = convert_to_yolo_bbox(x, y, padded_w, padded_h, img_shape[1], img_shape[0])
+        labels.append((PORE_CLASS_ID, bx, by, bw, bh))
 
     return pores, labels
 
