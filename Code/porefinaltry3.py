@@ -40,7 +40,7 @@ def save_yolo_labels(output_labels_dir, image_name, labels):
     label_file = os.path.join(output_labels_dir, os.path.splitext(image_name)[0] + ".txt")
     with open(label_file, "w") as f:
         for label in labels:
-            f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\\n")
+            f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
 def are_clusters_far_enough(new_center, existing_centers, min_distance):
     for center in existing_centers:
