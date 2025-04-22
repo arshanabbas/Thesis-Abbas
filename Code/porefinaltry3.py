@@ -84,19 +84,22 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     polygon_np = np.array(polygon, dtype=np.int32).reshape((-1, 1, 2))
     x_min, y_min = np.min(polygon_np, axis=0)[0]
     x_max, y_max = np.max(polygon_np, axis=0)[0]
-    max_attempts = 200
     num_clusters = random.randint(MIN_CLUSTERS, MAX_CLUSTERS)
+    MIN_CLUSTER_PORE_COUNT = 3  # Hard rule for porennest definition
 
+    # Prepare masks
     mask = np.zeros((img_shape[0], img_shape[1]), dtype=np.uint8)
     cv2.fillPoly(mask, [polygon_np], 255)
-    margin_mask = cv2.erode(mask, np.ones((2*BOUNDARY_MARGIN+1, 2*BOUNDARY_MARGIN+1), np.uint8))
+    margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
 
+    # Generate valid cluster centers
     cluster_centers = []
     while len(cluster_centers) < num_clusters:
         cx, cy = random.randint(x_min, x_max), random.randint(y_min, y_max)
         if mask[cy, cx] == 255 and margin_mask[cy, cx] == 255 and are_clusters_far_enough((cx, cy), cluster_centers, MIN_DISTANCE_BETWEEN_CLUSTERS):
             cluster_centers.append((cx, cy))
 
+    # Define pore sizes
     target_num_pores = random.randint(MIN_TOTAL_PORES, MAX_TOTAL_PORES)
     small, medium, large = target_num_pores // 3, target_num_pores // 3, target_num_pores - 2 * (target_num_pores // 3)
 
@@ -119,6 +122,7 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
             return True
         return False
 
+    # Place pores
     attempts = 0
     while size_ranges and attempts < 1000:
         attempts += 1
@@ -138,15 +142,13 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         if try_place_pore(x, y, w, h, angle):
             size_ranges.pop()
 
-    # ---------------------------
-    # NEW: Create Porenest boxes and filter contained Pores
-    # ---------------------------
+    # Identify valid porenests
     porenests_pixel_boxes = []
-
     for cx, cy in cluster_centers:
         cluster_related = [p for p in pores if math.hypot(p[0] - cx, p[1] - cy) < 25]
-        if not cluster_related:
-            continue
+        if len(cluster_related) < MIN_CLUSTER_PORE_COUNT:
+            continue  # Skip small groups
+
         xs, ys, ws, hs = zip(*[(x, y, w, h) for (x, y, w, h, _) in cluster_related])
         min_x = max(0, min(xs) - max(ws) - CLUSTER_PADDING)
         max_x = min(img_shape[1], max(xs) + max(ws) + CLUSTER_PADDING)
@@ -160,7 +162,7 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
         bx, by, bw, bh = convert_to_yolo_bbox(cx_box, cy_box, cluster_w / 2, cluster_h / 2, img_shape[1], img_shape[0])
         labels.append((PORE_NEST_CLASS_ID, bx, by, bw, bh))
 
-    # Only label pores that are NOT inside any porenest box
+    # Add individual pore labels (not inside porenests)
     for (x, y, w, h, angle) in pores:
         inside_any_nest = any(min_x <= x <= max_x and min_y <= y <= max_y for (min_x, min_y, max_x, max_y) in porenests_pixel_boxes)
         if inside_any_nest:
