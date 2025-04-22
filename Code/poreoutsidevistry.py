@@ -97,7 +97,7 @@ def draw_pore(image, x, y, w, h, angle, base_arc_start):
         ea = sa + angle_step
 
         if i > 0:
-            jitter_angle = random.uniform(-5, 5)
+            jitter_angle = random.uniform(-15, 15)
             sa += jitter_angle
             ea += jitter_angle
 
