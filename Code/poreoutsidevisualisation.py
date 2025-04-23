@@ -124,7 +124,7 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
     cluster_bounding_boxes = []
     cluster_regions = []
 
-    # --- Step 1: Generate valid porenests ---
+    # Step 1: Generate valid porenests (4–6 pores each)
     valid_clusters = 0
     cluster_attempts = 0
     max_cluster_attempts = 1000
@@ -189,10 +189,11 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
             cluster_bounding_boxes.append((xmin, ymin, xmax, ymax))
             cluster_regions.append((cx, cy))
 
-    # --- Step 2: Add scattered pores (not too close to porenests) ---
+    # Step 2: Generate scattered pores with enforced distance from clusters AND other singulars
     scattered_pores_needed = total_pores - len(pores)
     scatter_attempts = 0
     max_scatter_attempts = 1500
+    singular_positions = []
 
     while scattered_pores_needed > 0 and scatter_attempts < max_scatter_attempts:
         x = random.randint(x_min, x_max)
@@ -204,12 +205,16 @@ def generate_balanced_pores_with_labels(polygon, img_shape):
 
         if mask[y, x] == 255 and margin_mask[y, x] == 255:
             far_from_clusters = all(math.hypot(x - cx, y - cy) > MIN_DISTANCE_BETWEEN_SINGULAR_AND_CLUSTER for cx, cy in cluster_regions)
-            if far_from_clusters and is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
+            far_from_other_singulars = all(math.hypot(x - sx, y - sy) > MIN_DISTANCE_BETWEEN_SINGULAR_PORES for sx, sy in singular_positions)
+
+            if far_from_clusters and far_from_other_singulars and is_valid_pore_shape(w, h) and is_far_from_existing(x, y, r, placed_pores):
                 pores.append((x, y, w, h, angle))
                 placed_pores.append((x, y, r))
+                singular_positions.append((x, y))
                 bx, by, bw, bh = convert_to_yolo_bbox(x, y, w + PORE_PADDING, h + PORE_PADDING, img_shape[1], img_shape[0])
                 labels.append((PORE_CLASS_ID, bx, by, bw, bh))
                 scattered_pores_needed -= 1
+
         scatter_attempts += 1
 
     return pores, labels, set()
