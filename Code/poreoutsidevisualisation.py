@@ -24,7 +24,7 @@ PORE_PADDING = 8
 CLUSTER_BOX_PADDING = 13
 MIN_CLUSTER_PORE_COUNT = 4
 MAX_CLUSTER_PORE_COUNT = 6
-MIN_DISTANCE_BETWEEN_SINGULAR_AND_CLUSTER = 30
+#MIN_DISTANCE_BETWEEN_SINGULAR_AND_CLUSTER = 30
 
 # ----------------------- Helper Functions -----------------------
 def is_valid_pore_shape(w, h):
