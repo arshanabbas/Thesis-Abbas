@@ -4,7 +4,7 @@ import numpy as np
 import random
 import math
 from matplotlib import pyplot as plt
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, distance_transform_edt
 
 # ----------------------- Configuration -----------------------
 CLASS_BIG_PORE_ID = 2
@@ -68,22 +68,27 @@ def generate_major_lobed_pore(
     textured_canvas = np.clip(canvas.astype(np.int16) - combined_texture, 0, 255).astype(np.uint8)
     canvas[mask] = textured_canvas[mask]
 
-    # Add bright edge reflection
-    edge_gradient = np.zeros_like(canvas, dtype=np.float32)
+    # Correct bright edge reflection
+    distance_map = distance_transform_edt(~mask)
+    distance_map = distance_map / distance_map.max()
+
     direction = random.choice(['top', 'bottom', 'left', 'right'])
-    for y in range(img_size[0]):
-        for x in range(img_size[1]):
-            if direction == 'top':
-                distance = y / img_size[0]
-            elif direction == 'bottom':
-                distance = (img_size[0] - y) / img_size[0]
-            elif direction == 'left':
-                distance = x / img_size[1]
-            elif direction == 'right':
-                distance = (img_size[1] - x) / img_size[1]
-            edge_gradient[y, x] = max(0, min(1, distance * 2))
-    edge_effect = gaussian_filter(edge_gradient, sigma=10) * 80
-    canvas = np.clip(canvas.astype(np.int16) + (edge_effect * mask).astype(np.int16), 0, 255).astype(np.uint8)
+    if direction == 'top':
+        edge_weight = np.linspace(1, 0, img_size[0]).reshape(-1, 1)
+    elif direction == 'bottom':
+        edge_weight = np.linspace(0, 1, img_size[0]).reshape(-1, 1)
+    elif direction == 'left':
+        edge_weight = np.linspace(1, 0, img_size[1]).reshape(1, -1)
+    elif direction == 'right':
+        edge_weight = np.linspace(0, 1, img_size[1]).reshape(1, -1)
+
+    edge_weight = np.repeat(edge_weight, img_size[1] if edge_weight.shape[0] == 1 else 1, axis=0)
+    edge_weight = np.repeat(edge_weight, img_size[0] if edge_weight.shape[1] == 1 else 1, axis=1)
+
+    brightness_boost = (1 - distance_map) * edge_weight * 80
+    brightness_boost = gaussian_filter(brightness_boost, sigma=5)
+
+    canvas = np.clip(canvas.astype(np.int16) + (brightness_boost * mask).astype(np.int16), 0, 255).astype(np.uint8)
 
     # Slight rotation
     angle = random.randint(0, 360)
