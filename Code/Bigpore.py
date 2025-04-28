@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 # ----------------------- Configuration -----------------------
 CLASS_BIG_PORE_ID = 2
 BOUNDARY_MARGIN = 3
+MIN_DISTANCE_BETWEEN_BIG_PORES = 30
 
 # ----------------------- Helper Functions -----------------------
 def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
@@ -72,6 +73,7 @@ def generate_big_pores_with_labels(polygon, img_shape, num_big_pores=3):
     margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
 
     big_pores_info = []
+    centers = []
 
     attempts = 0
     max_attempts = 500
@@ -88,10 +90,19 @@ def generate_big_pores_with_labels(polygon, img_shape, num_big_pores=3):
             attempts += 1
             continue
 
-        if np.all(region == 255):
-            big_pores_info.append((x, y, pore_img))
+        bx, by = x + pore_size//2, y + pore_size//2
 
-            bx, by = x + pore_size//2, y + pore_size//2
+        # Check distance from existing pores
+        too_close = False
+        for (cx, cy) in centers:
+            if math.hypot(bx - cx, by - cy) < MIN_DISTANCE_BETWEEN_BIG_PORES:
+                too_close = True
+                break
+
+        if np.all(region == 255) and not too_close:
+            big_pores_info.append((x, y, pore_img))
+            centers.append((bx, by))
+
             bw, bh = pore_size//2, pore_size//2
             label = (CLASS_BIG_PORE_ID, *convert_to_yolo_bbox(bx, by, bw, bh, img_shape[1], img_shape[0]))
             labels.append(label)
