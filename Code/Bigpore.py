@@ -68,6 +68,23 @@ def generate_major_lobed_pore(
     textured_canvas = np.clip(canvas.astype(np.int16) - combined_texture, 0, 255).astype(np.uint8)
     canvas[mask] = textured_canvas[mask]
 
+    # Add bright edge reflection
+    edge_gradient = np.zeros_like(canvas, dtype=np.float32)
+    direction = random.choice(['top', 'bottom', 'left', 'right'])
+    for y in range(img_size[0]):
+        for x in range(img_size[1]):
+            if direction == 'top':
+                distance = y / img_size[0]
+            elif direction == 'bottom':
+                distance = (img_size[0] - y) / img_size[0]
+            elif direction == 'left':
+                distance = x / img_size[1]
+            elif direction == 'right':
+                distance = (img_size[1] - x) / img_size[1]
+            edge_gradient[y, x] = max(0, min(1, distance * 2))
+    edge_effect = gaussian_filter(edge_gradient, sigma=10) * 80
+    canvas = np.clip(canvas.astype(np.int16) + (edge_effect * mask).astype(np.int16), 0, 255).astype(np.uint8)
+
     # Slight rotation
     angle = random.randint(0, 360)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
