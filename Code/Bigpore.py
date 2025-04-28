@@ -28,6 +28,37 @@ def generate_smooth_noise(shape, scale=10):
     noise = (noise - noise.min()) / (noise.max() - noise.min())
     return noise
 
+def generate_multi_layer_dark_variation(shape, strength=15, num_layers=4):
+    h, w = shape
+    final_variation = np.ones((h, w), dtype=np.float32)
+    directions = ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right']
+
+    for _ in range(num_layers):
+        direction = random.choice(directions)
+        if 'top' in direction:
+            vertical = np.linspace(0, 1, h).reshape(-1, 1)
+        else:
+            vertical = np.linspace(1, 0, h).reshape(-1, 1)
+
+        if 'left' in direction:
+            horizontal = np.linspace(0, 1, w).reshape(1, -1)
+        else:
+            horizontal = np.linspace(1, 0, w).reshape(1, -1)
+
+        if direction in ['top', 'bottom']:
+            gradient = vertical
+        elif direction in ['left', 'right']:
+            gradient = horizontal
+        else:
+            gradient = (vertical + horizontal) / 2
+
+        variation_strength = random.uniform(0.07, 0.15)
+        gradient = 1 - variation_strength * gradient
+        final_variation *= gradient
+
+    final_variation = gaussian_filter(final_variation, sigma=5)
+    return final_variation
+
 def generate_major_lobed_pore(
     img_size=(64, 64),
     base_radius=20,
@@ -68,30 +99,9 @@ def generate_major_lobed_pore(
     textured_canvas = np.clip(canvas.astype(np.int16) - combined_texture, 0, 255).astype(np.uint8)
     canvas[mask] = textured_canvas[mask]
 
-    # Correct final bright edge reflection
-    distance_map = distance_transform_edt(~mask)
-    distance_map = distance_map / distance_map.max()
-
-    direction = random.choice(['top', 'bottom', 'left', 'right'])
-    directional_mask = np.zeros_like(canvas, dtype=np.float32)
-
-    if direction == 'top':
-        for y in range(img_size[0]):
-            directional_mask[y, :] = max(0, 1 - y / img_size[0] * 2)
-    elif direction == 'bottom':
-        for y in range(img_size[0]):
-            directional_mask[y, :] = max(0, 1 - (img_size[0] - y) / img_size[0] * 2)
-    elif direction == 'left':
-        for x in range(img_size[1]):
-            directional_mask[:, x] = max(0, 1 - x / img_size[1] * 2)
-    elif direction == 'right':
-        for x in range(img_size[1]):
-            directional_mask[:, x] = max(0, 1 - (img_size[1] - x) / img_size[1] * 2)
-
-    edge_brightness = (1 - distance_map) * directional_mask * 80
-    edge_brightness = gaussian_filter(edge_brightness, sigma=5)
-
-    canvas = np.clip(canvas.astype(np.int16) + (edge_brightness * mask).astype(np.int16), 0, 255).astype(np.uint8)
+    # Add multi-layer core shading
+    core_variation = generate_multi_layer_dark_variation(img_size, strength=15, num_layers=4)
+    canvas = np.clip(canvas.astype(np.float32) * core_variation, 0, 255).astype(np.uint8)
 
     # Slight rotation
     angle = random.randint(0, 360)
