@@ -24,13 +24,13 @@ def generate_major_lobed_pore(
     img_size=(64, 64),
     base_radius=20,
     num_lobes=5,
-    lobe_strength=0.3,
+    lobe_strength=0.25,
     fill_color_range=(30, 70),
-    blur_strength=3
+    blur_strength=5
 ):
     canvas = np.zeros(img_size, dtype=np.uint8)
     center = (img_size[1]//2, img_size[0]//2)
-    
+
     lobe_angles = np.linspace(0, 2*np.pi, num=num_lobes, endpoint=False) + np.random.uniform(0, 2*np.pi/num_lobes, num_lobes)
     angles = np.linspace(0, 2*np.pi, 200, endpoint=False)
 
@@ -46,6 +46,16 @@ def generate_major_lobed_pore(
     ], dtype=np.int32)
 
     cv2.fillPoly(canvas, [points], color=np.random.randint(*fill_color_range))
+
+    # Add internal gradient for more realism
+    mask = canvas > 0
+    gradient = np.random.randint(10, 30)
+    canvas[mask] = np.clip(canvas[mask] - np.random.randint(0, gradient, size=mask.sum()), 0, 255)
+
+    # Slight rotation
+    angle = random.randint(0, 360)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    canvas = cv2.warpAffine(canvas, M, (img_size[1], img_size[0]), borderValue=0)
 
     if blur_strength > 0:
         canvas = cv2.GaussianBlur(canvas, (blur_strength|1, blur_strength|1), sigmaX=2)
