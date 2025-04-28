@@ -4,6 +4,7 @@ import numpy as np
 import random
 import math
 from matplotlib import pyplot as plt
+from scipy.ndimage import gaussian_filter
 
 # ----------------------- Configuration -----------------------
 CLASS_BIG_PORE_ID = 2
@@ -21,6 +22,12 @@ def save_yolo_labels(output_labels_dir, image_name, labels):
             f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
 # ----------------------- Big Pore Generator -----------------------
+def generate_smooth_noise(shape, scale=10):
+    noise = np.random.rand(*shape)
+    noise = gaussian_filter(noise, sigma=scale)
+    noise = (noise - noise.min()) / (noise.max() - noise.min())
+    return noise
+
 def generate_major_lobed_pore(
     img_size=(64, 64),
     base_radius=20,
@@ -48,17 +55,17 @@ def generate_major_lobed_pore(
 
     cv2.fillPoly(canvas, [points], color=np.random.randint(*fill_color_range))
 
-    # Add internal crater texture
+    # Add internal crater texture with smooth noise
     mask = canvas > 0
-    gradient = np.random.randint(10, 30)
-    crater_texture = np.random.normal(0, 5, img_size).astype(np.int16)
+    base_texture = np.random.randint(10, 30)
+    smooth_noise = generate_smooth_noise(img_size, scale=8)
     radial_gradient = np.zeros_like(canvas, dtype=np.float32)
     for y in range(img_size[0]):
         for x in range(img_size[1]):
             radial_distance = math.hypot(x - center[0], y - center[1]) / (base_radius * 1.5)
             radial_gradient[y, x] = 1 - min(1, radial_distance)
-    crater_intensity = (crater_texture * radial_gradient * 0.5).astype(np.int16)
-    textured_canvas = np.clip(canvas.astype(np.int16) + crater_intensity, 0, 255).astype(np.uint8)
+    combined_texture = (smooth_noise * radial_gradient * 0.6 * base_texture).astype(np.int16)
+    textured_canvas = np.clip(canvas.astype(np.int16) - combined_texture, 0, 255).astype(np.uint8)
     canvas[mask] = textured_canvas[mask]
 
     # Slight rotation
