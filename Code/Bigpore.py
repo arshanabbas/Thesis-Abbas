@@ -68,27 +68,30 @@ def generate_major_lobed_pore(
     textured_canvas = np.clip(canvas.astype(np.int16) - combined_texture, 0, 255).astype(np.uint8)
     canvas[mask] = textured_canvas[mask]
 
-    # Correct bright edge reflection
+    # Correct final bright edge reflection
     distance_map = distance_transform_edt(~mask)
     distance_map = distance_map / distance_map.max()
 
     direction = random.choice(['top', 'bottom', 'left', 'right'])
+    directional_mask = np.zeros_like(canvas, dtype=np.float32)
+
     if direction == 'top':
-        edge_weight = np.linspace(1, 0, img_size[0]).reshape(-1, 1)
+        for y in range(img_size[0]):
+            directional_mask[y, :] = max(0, 1 - y / img_size[0] * 2)
     elif direction == 'bottom':
-        edge_weight = np.linspace(0, 1, img_size[0]).reshape(-1, 1)
+        for y in range(img_size[0]):
+            directional_mask[y, :] = max(0, 1 - (img_size[0] - y) / img_size[0] * 2)
     elif direction == 'left':
-        edge_weight = np.linspace(1, 0, img_size[1]).reshape(1, -1)
+        for x in range(img_size[1]):
+            directional_mask[:, x] = max(0, 1 - x / img_size[1] * 2)
     elif direction == 'right':
-        edge_weight = np.linspace(0, 1, img_size[1]).reshape(1, -1)
+        for x in range(img_size[1]):
+            directional_mask[:, x] = max(0, 1 - (img_size[1] - x) / img_size[1] * 2)
 
-    edge_weight = np.repeat(edge_weight, img_size[1] if edge_weight.shape[0] == 1 else 1, axis=0)
-    edge_weight = np.repeat(edge_weight, img_size[0] if edge_weight.shape[1] == 1 else 1, axis=1)
+    edge_brightness = (1 - distance_map) * directional_mask * 80
+    edge_brightness = gaussian_filter(edge_brightness, sigma=5)
 
-    brightness_boost = (1 - distance_map) * edge_weight * 80
-    brightness_boost = gaussian_filter(brightness_boost, sigma=5)
-
-    canvas = np.clip(canvas.astype(np.int16) + (brightness_boost * mask).astype(np.int16), 0, 255).astype(np.uint8)
+    canvas = np.clip(canvas.astype(np.int16) + (edge_brightness * mask).astype(np.int16), 0, 255).astype(np.uint8)
 
     # Slight rotation
     angle = random.randint(0, 360)
