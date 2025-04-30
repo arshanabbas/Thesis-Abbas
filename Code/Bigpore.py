@@ -33,17 +33,11 @@ def generate_multi_directional_dark_variation(shape, strength=15, num_layers=4):
     result = np.zeros((h, w), dtype=np.float32)
     for _ in range(num_layers):
         base = generate_smooth_noise(shape, scale=random.uniform(4, 12))
-        gradient_direction = random.choice([(1, 0), (0, 1), (1, 1), (-1, 1)])
-        gradient = np.zeros_like(base)
-
-        for i in range(h):
-            for j in range(w):
-                offset = (i * gradient_direction[0] + j * gradient_direction[1]) / (h + w)
-                gradient[i, j] = base[i, j] * (1 - strength/100 * offset)
-
+        direction = random.choice([0, 90, 180, 270])
+        M = cv2.getRotationMatrix2D((w//2, h//2), direction, 1)
+        rotated = cv2.warpAffine(base, M, (w, h), borderMode=cv2.BORDER_REFLECT)
         strength_scale = random.uniform(0.07, 0.15)
-        result += gradient * strength_scale
-
+        result += rotated * strength_scale
     result = 1 - result
     result = np.clip(result, 0.85, 1.0)
     return result
@@ -75,7 +69,6 @@ def generate_major_lobed_pore(
 
     cv2.fillPoly(canvas, [points], color=np.random.randint(*fill_color_range))
 
-    # Add internal crater texture with smooth noise
     mask = canvas > 0
     base_texture = np.random.randint(10, 30)
     smooth_noise = generate_smooth_noise(img_size, scale=8)
@@ -88,11 +81,12 @@ def generate_major_lobed_pore(
     textured_canvas = np.clip(canvas.astype(np.int16) - combined_texture, 0, 255).astype(np.uint8)
     canvas[mask] = textured_canvas[mask]
 
-    # Add multi-directional core shading
     core_variation = generate_multi_directional_dark_variation(img_size, strength=15, num_layers=4)
     canvas = np.clip(canvas.astype(np.float32) * core_variation, 0, 255).astype(np.uint8)
 
-    # Slight rotation
+    shadow = cv2.GaussianBlur((mask * 255).astype(np.uint8), (13, 13), sigmaX=6)
+    canvas = np.maximum(canvas, (shadow * 0.15).astype(np.uint8))
+
     angle = random.randint(0, 360)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
     canvas = cv2.warpAffine(canvas, M, (img_size[1], img_size[0]), borderValue=0)
@@ -131,10 +125,9 @@ def generate_big_pores_with_labels(polygon, img_shape, num_big_pores=3):
 
         bx, by = x + pore_size//2, y + pore_size//2
 
-        # Check distance from existing pores
         too_close = False
         for (cx, cy) in centers:
-            if math.hypot(bx - cx, by - cy) < MIN_DISTANCE_BETWEEN_BIG_PORES:
+            if math.hypot(bx - cx, by - cy) < MIN_DISTANCE_BETWEEN_BIG_PORES + pore_size//2:
                 too_close = True
                 break
 
@@ -148,55 +141,3 @@ def generate_big_pores_with_labels(polygon, img_shape, num_big_pores=3):
         attempts += 1
 
     return big_pores_info, labels
-
-# ----------------------- Main Function -----------------------
-def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, output_labels_dir):
-    os.makedirs(output_images_dir, exist_ok=True)
-    os.makedirs(output_labels_dir, exist_ok=True)
-
-    for annotation_file in os.listdir(annotation_dir):
-        if not annotation_file.endswith(".txt"):
-            continue
-
-        image_name = os.path.splitext(annotation_file)[0] + ".jpg"
-        image_path = os.path.join(image_dir, image_name)
-        annotation_path = os.path.join(annotation_dir, annotation_file)
-
-        if not os.path.exists(image_path):
-            continue
-
-        image = cv2.imread(image_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-        label_list = []
-
-        with open(annotation_path, 'r') as f:
-            for line in f:
-                if int(line.strip().split()[0]) != 3:
-                    continue
-
-                polygon = list(map(float, line.strip().split()[1:]))
-                points = [(int(polygon[i] * image.shape[1]), int(polygon[i + 1] * image.shape[0])) for i in range(0, len(polygon), 2)]
-                big_pores, labels = generate_big_pores_with_labels(points, image.shape, num_big_pores=random.randint(2, 4))
-                label_list.extend(labels)
-
-                for (x, y, pore_img) in big_pores:
-                    roi = image[y:y+pore_img.shape[0], x:x+pore_img.shape[1]]
-                    pore_img_rgb = cv2.merge([pore_img, pore_img, pore_img])
-                    mask = pore_img > 0
-                    roi[mask] = pore_img_rgb[mask]
-
-        cv2.imwrite(os.path.join(output_images_dir, image_name), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-        if label_list:
-            save_yolo_labels(output_labels_dir, image_name, label_list)
-
-# ----------------------- Paths -----------------------
-dirs = {
-    "image_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images",
-    "annotation_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8",
-    "output_images_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/image",
-    "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
-}
-
-if __name__ == '__main__':
-    visualize_class3_and_annotate(**dirs)
