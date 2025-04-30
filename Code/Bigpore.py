@@ -4,7 +4,7 @@ import numpy as np
 import random
 import math
 from matplotlib import pyplot as plt
-from scipy.ndimage import gaussian_filter, distance_transform_edt
+from scipy.ndimage import gaussian_filter
 
 # ----------------------- Configuration -----------------------
 CLASS_BIG_PORE_ID = 2
@@ -125,19 +125,69 @@ def generate_big_pores_with_labels(polygon, img_shape, num_big_pores=3):
 
         bx, by = x + pore_size//2, y + pore_size//2
 
-        too_close = False
-        for (cx, cy) in centers:
-            if math.hypot(bx - cx, by - cy) < MIN_DISTANCE_BETWEEN_BIG_PORES + pore_size//2:
-                too_close = True
-                break
+        too_close = any(
+            math.hypot(bx - cx, by - cy) < MIN_DISTANCE_BETWEEN_BIG_PORES + pore_size//2
+            for (cx, cy) in centers
+        )
 
         if np.all(region == 255) and not too_close:
             big_pores_info.append((x, y, pore_img))
             centers.append((bx, by))
-
             bw, bh = pore_size//2, pore_size//2
             label = (CLASS_BIG_PORE_ID, *convert_to_yolo_bbox(bx, by, bw, bh, img_shape[1], img_shape[0]))
             labels.append(label)
         attempts += 1
 
     return big_pores_info, labels
+
+# ----------------------- Main Function -----------------------
+def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, output_labels_dir):
+    os.makedirs(output_images_dir, exist_ok=True)
+    os.makedirs(output_labels_dir, exist_ok=True)
+
+    for annotation_file in os.listdir(annotation_dir):
+        if not annotation_file.endswith(".txt"):
+            continue
+
+        image_name = os.path.splitext(annotation_file)[0] + ".jpg"
+        image_path = os.path.join(image_dir, image_name)
+        annotation_path = os.path.join(annotation_dir, annotation_file)
+
+        if not os.path.exists(image_path):
+            continue
+
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        label_list = []
+
+        with open(annotation_path, 'r') as f:
+            for line in f:
+                if int(line.strip().split()[0]) != 3:
+                    continue
+
+                polygon = list(map(float, line.strip().split()[1:]))
+                points = [(int(polygon[i] * image.shape[1]), int(polygon[i + 1] * image.shape[0])) for i in range(0, len(polygon), 2)]
+                big_pores, labels = generate_big_pores_with_labels(points, image.shape, num_big_pores=random.randint(2, 4))
+                label_list.extend(labels)
+
+                for (x, y, pore_img) in big_pores:
+                    roi = image[y:y+pore_img.shape[0], x:x+pore_img.shape[1]]
+                    pore_img_rgb = cv2.merge([pore_img, pore_img, pore_img])
+                    mask = pore_img > 0
+                    roi[mask] = pore_img_rgb[mask]
+
+        cv2.imwrite(os.path.join(output_images_dir, image_name), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+        if label_list:
+            save_yolo_labels(output_labels_dir, image_name, label_list)
+
+# ----------------------- Paths -----------------------
+dirs = {
+    "image_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images",
+    "annotation_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8",
+    "output_images_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/image",
+    "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
+}
+
+if __name__ == '__main__':
+    visualize_class3_and_annotate(**dirs)
