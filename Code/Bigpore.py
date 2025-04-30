@@ -28,36 +28,25 @@ def generate_smooth_noise(shape, scale=10):
     noise = (noise - noise.min()) / (noise.max() - noise.min())
     return noise
 
-def generate_multi_layer_dark_variation(shape, strength=15, num_layers=4):
+def generate_multi_directional_dark_variation(shape, strength=15, num_layers=4):
     h, w = shape
-    final_variation = np.ones((h, w), dtype=np.float32)
-    directions = ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right']
-
+    result = np.zeros((h, w), dtype=np.float32)
     for _ in range(num_layers):
-        direction = random.choice(directions)
-        if 'top' in direction:
-            vertical = np.linspace(0, 1, h).reshape(-1, 1)
-        else:
-            vertical = np.linspace(1, 0, h).reshape(-1, 1)
+        base = generate_smooth_noise(shape, scale=random.uniform(4, 12))
+        gradient_direction = random.choice([(1, 0), (0, 1), (1, 1), (-1, 1)])
+        gradient = np.zeros_like(base)
 
-        if 'left' in direction:
-            horizontal = np.linspace(0, 1, w).reshape(1, -1)
-        else:
-            horizontal = np.linspace(1, 0, w).reshape(1, -1)
+        for i in range(h):
+            for j in range(w):
+                offset = (i * gradient_direction[0] + j * gradient_direction[1]) / (h + w)
+                gradient[i, j] = base[i, j] * (1 - strength/100 * offset)
 
-        if direction in ['top', 'bottom']:
-            gradient = vertical
-        elif direction in ['left', 'right']:
-            gradient = horizontal
-        else:
-            gradient = (vertical + horizontal) / 2
+        strength_scale = random.uniform(0.07, 0.15)
+        result += gradient * strength_scale
 
-        variation_strength = random.uniform(0.07, 0.15)
-        gradient = 1 - variation_strength * gradient
-        final_variation *= gradient
-
-    final_variation = gaussian_filter(final_variation, sigma=5)
-    return final_variation
+    result = 1 - result
+    result = np.clip(result, 0.85, 1.0)
+    return result
 
 def generate_major_lobed_pore(
     img_size=(64, 64),
@@ -99,8 +88,8 @@ def generate_major_lobed_pore(
     textured_canvas = np.clip(canvas.astype(np.int16) - combined_texture, 0, 255).astype(np.uint8)
     canvas[mask] = textured_canvas[mask]
 
-    # Add multi-layer core shading
-    core_variation = generate_multi_layer_dark_variation(img_size, strength=15, num_layers=4)
+    # Add multi-directional core shading
+    core_variation = generate_multi_directional_dark_variation(img_size, strength=15, num_layers=4)
     canvas = np.clip(canvas.astype(np.float32) * core_variation, 0, 255).astype(np.uint8)
 
     # Slight rotation
