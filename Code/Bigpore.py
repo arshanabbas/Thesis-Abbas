@@ -22,22 +22,24 @@ def save_yolo_labels(output_labels_dir, image_name, labels):
             f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
 # ----------------------- Big Pore Generator -----------------------
-def generate_elliptical_bands(shape, center, max_radius, band_count=4):
+def generate_elliptical_band_pattern(shape, num_bands=4):
     h, w = shape
-    band_image = np.zeros((h, w), dtype=np.float32)
-    for i in range(band_count):
-        factor = 1 - (i / band_count)
+    canvas = np.ones((h, w), dtype=np.float32)
+    center = (w // 2 + random.randint(-2, 2), h // 2 + random.randint(-2, 2))
+
+    for i in range(num_bands):
         axes = (
-            int(max_radius * factor * random.uniform(0.9, 1.1)),
-            int(max_radius * factor * random.uniform(0.6, 0.9))
+            int(w * (0.4 + i * 0.1 + random.uniform(-0.02, 0.02))),
+            int(h * (0.4 + i * 0.1 + random.uniform(-0.02, 0.02)))
         )
-        angle = random.randint(0, 180)
-        color = 1.0 - random.uniform(0.05, 0.15) * i
-        temp = np.zeros((h, w), dtype=np.uint8)
-        cv2.ellipse(temp, center, axes, angle, 0, 360, 255, thickness=-1)
-        band_image[temp > 0] = color
-    band_image = cv2.GaussianBlur(band_image, (5, 5), sigmaX=2)
-    return band_image
+        angle = random.randint(-15, 15)
+        color_variation = 1.0 - random.uniform(0.05, 0.15)
+        temp_layer = np.zeros_like(canvas)
+        cv2.ellipse(temp_layer, center, axes, angle, 0, 360, color_variation, -1, lineType=cv2.LINE_AA)
+        canvas = np.minimum(canvas, temp_layer)
+
+    blurred = cv2.GaussianBlur(canvas, (9, 9), sigmaX=3)
+    return blurred
 
 def generate_major_lobed_pore(
     img_size=(64, 64),
@@ -68,23 +70,10 @@ def generate_major_lobed_pore(
 
     mask = canvas > 0
 
-    # Step 1 & 2: Elliptical banding with varying brightness
-    elliptical_shading = generate_elliptical_bands(img_size, center, max_radius=base_radius * 0.9, band_count=4)
-    canvas = (canvas.astype(np.float32) * elliptical_shading).astype(np.uint8)
+    # Multi-band elliptical shading
+    band_shading = generate_elliptical_band_pattern(img_size, num_bands=4)
+    canvas = np.clip(canvas.astype(np.float32) * band_shading, 0, 255).astype(np.uint8)
 
-    # Add base texture (already blended)
-    base_texture = np.random.randint(10, 30)
-    smooth_noise = gaussian_filter(np.random.rand(*img_size), sigma=6)
-    radial_gradient = np.zeros_like(canvas, dtype=np.float32)
-    for y in range(img_size[0]):
-        for x in range(img_size[1]):
-            radial_distance = math.hypot(x - center[0], y - center[1]) / (base_radius * 1.5)
-            radial_gradient[y, x] = 1 - min(1, radial_distance)
-    combined_texture = (smooth_noise * radial_gradient * 0.6 * base_texture).astype(np.int16)
-    textured_canvas = np.clip(canvas.astype(np.int16) - combined_texture, 0, 255).astype(np.uint8)
-    canvas[mask] = textured_canvas[mask]
-
-    # Rotate pore
     angle = random.randint(0, 360)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
     canvas = cv2.warpAffine(canvas, M, (img_size[1], img_size[0]), borderValue=0)
@@ -169,9 +158,11 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
 
                 for (x, y, pore_img) in big_pores:
                     mask = pore_img > 0
+
                     shadow = (mask.astype(np.uint8) * 255)
                     shadow = cv2.GaussianBlur(shadow, (17, 17), sigmaX=6)
                     shadow = (shadow * 0.25).astype(np.uint8)
+
                     for c in range(3):
                         roi = image[y:y+pore_img.shape[0], x:x+pore_img.shape[1], c]
                         roi_shadowed = np.clip(roi.astype(np.int32) - shadow, 0, 255).astype(np.uint8)
