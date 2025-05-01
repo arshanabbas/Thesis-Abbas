@@ -4,7 +4,7 @@ import numpy as np
 import random
 import math
 from matplotlib import pyplot as plt
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, distance_transform_edt
 
 # ----------------------- Configuration -----------------------
 CLASS_BIG_PORE_ID = 2
@@ -41,13 +41,6 @@ def generate_multi_directional_dark_variation(shape, strength=15, num_layers=4):
     result = 1 - result
     result = np.clip(result, 0.85, 1.0)
     return result
-
-def add_outer_shadow(mask, blur_kernel=25, shadow_intensity=60):
-    dilated = cv2.dilate(mask, np.ones((5,5), np.uint8), iterations=2)
-    outer_shadow = cv2.subtract(dilated, mask)
-    shadow_blurred = cv2.GaussianBlur(outer_shadow, (blur_kernel, blur_kernel), 0)
-    shadow_normalized = (shadow_blurred / 255.0) * shadow_intensity
-    return shadow_normalized.astype(np.uint8)
 
 def generate_major_lobed_pore(
     img_size=(64, 64),
@@ -98,11 +91,6 @@ def generate_major_lobed_pore(
     if blur_strength > 0:
         canvas = cv2.GaussianBlur(canvas, (blur_strength|1, blur_strength|1), sigmaX=2)
 
-    # Add external shadow
-    shadow = add_outer_shadow((canvas > 0).astype(np.uint8)*255, blur_kernel=17, shadow_intensity=40)
-    for c in range(3):
-        canvas = np.clip(canvas + shadow, 0, 255).astype(np.uint8)
-
     return canvas
 
 # ----------------------- Pore Placement -----------------------
@@ -139,6 +127,7 @@ def generate_big_pores_with_labels(polygon, img_shape, num_big_pores=3):
         if np.all(region == 255) and not too_close:
             big_pores_info.append((x, y, pore_img))
             centers.append((bx, by))
+
             bw, bh = pore_size//2, pore_size//2
             label = (CLASS_BIG_PORE_ID, *convert_to_yolo_bbox(bx, by, bw, bh, img_shape[1], img_shape[0]))
             labels.append(label)
@@ -164,6 +153,7 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
 
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
         label_list = []
 
         with open(annotation_path, 'r') as f:
@@ -177,9 +167,19 @@ def visualize_class3_and_annotate(image_dir, annotation_dir, output_images_dir, 
                 label_list.extend(labels)
 
                 for (x, y, pore_img) in big_pores:
-                    roi = image[y:y+pore_img.shape[0], x:x+pore_img.shape[1]]
-                    pore_img_rgb = cv2.merge([pore_img, pore_img, pore_img])
                     mask = pore_img > 0
+
+                    shadow = (mask.astype(np.uint8) * 255)
+                    shadow = cv2.GaussianBlur(shadow, (17, 17), sigmaX=6)
+                    shadow = (shadow * 0.25).astype(np.uint8)
+
+                    for c in range(3):
+                        roi = image[y:y+pore_img.shape[0], x:x+pore_img.shape[1], c]
+                        roi_shadowed = np.clip(roi.astype(np.int32) - shadow, 0, 255).astype(np.uint8)
+                        image[y:y+pore_img.shape[0], x:x+pore_img.shape[1], c] = np.where(mask, roi_shadowed, roi)
+
+                    pore_img_rgb = cv2.merge([pore_img, pore_img, pore_img])
+                    roi = image[y:y+pore_img.shape[0], x:x+pore_img.shape[1]]
                     roi[mask] = pore_img_rgb[mask]
 
         cv2.imwrite(os.path.join(output_images_dir, image_name), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
