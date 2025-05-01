@@ -15,10 +15,10 @@ dirs = {
 CLASS_ID = 0  # Singular pore
 BOUNDARY_MARGIN = 3
 NUM_PORES_PER_REGION = (3, 6)
-MIN_DISTANCE_BETWEEN_PORES = 25  # pixels
+MIN_DISTANCE_BETWEEN_PORES = 25
 
 
-# ------------ FUNCTION: Generate Pore Mask ------------
+# ------------ FUNCTION: Generate Textured Irregular Pore Mask ------------
 def generate_irregular_pore_mask(
     img_size=(64, 64),
     base_radius=20,
@@ -27,14 +27,9 @@ def generate_irregular_pore_mask(
     blur_strength=3,
     noise_strength=0.3
 ):
-    """
-    Generates an irregular pore mask with dark core and realistic internal texture.
-    Returns a single-channel (grayscale) image with values 0–255.
-    """
     h, w = img_size
     center = (w // 2, h // 2)
 
-    # --- Irregular boundary shape (lobed) ---
     angles = np.linspace(0, 2 * np.pi, 200, endpoint=False)
     radii = np.full_like(angles, base_radius, dtype=np.float32)
     lobe_angles = np.linspace(0, 2 * np.pi, num=num_lobes, endpoint=False)
@@ -50,25 +45,23 @@ def generate_irregular_pore_mask(
         for r, a in zip(radii, angles)
     ], dtype=np.int32)
 
-    # --- Create binary mask and smooth edges ---
     mask = np.zeros((h, w), dtype=np.uint8)
     cv2.fillPoly(mask, [points], 255)
     mask = cv2.GaussianBlur(mask, (blur_strength | 1, blur_strength | 1), sigmaX=2)
 
-    # --- Add radial darkness to simulate depth ---
     yy, xx = np.ogrid[:h, :w]
     dist = np.sqrt((xx - center[0])**2 + (yy - center[1])**2)
-    gradient = 1 - np.clip(dist / (base_radius * 1.2), 0, 1)  # tighter center
-    gradient = (gradient ** 2.0)  # deepen central dropoff
+    gradient = 1 - np.clip(dist / (base_radius * 1.2), 0, 1)
+    gradient = (gradient ** 2.0)
     dark_mask = (mask * gradient).astype(np.uint8)
 
-    # --- Add internal noise texture ---
     noise = (np.random.rand(h, w) * 255).astype(np.uint8)
     noise = cv2.GaussianBlur(noise, (5, 5), sigmaX=1.5)
     noise_normalized = noise / 255.0
     textured = (dark_mask * (1 - noise_strength) + dark_mask * noise_normalized * noise_strength).astype(np.uint8)
 
     return textured
+
 
 # ------------ FUNCTION: Convert to YOLO format ------------
 def convert_to_yolo_bbox(x, y, w, h, img_w, img_h):
