@@ -14,6 +14,8 @@ dirs = {
 
 CLASS_ID = 0  # Singular pore
 BOUNDARY_MARGIN = 3
+NUM_PORES_PER_REGION = (3, 6)
+MIN_DISTANCE_BETWEEN_PORES = 25  # pixels
 
 
 # ------------ FUNCTION: Generate Pore Mask ------------
@@ -56,9 +58,6 @@ def convert_to_yolo_bbox(x, y, w, h, img_w, img_h):
 
 # ------------ FUNCTION: Save YOLO Labels ------------
 def save_yolo_labels(output_labels_dir, image_name, labels):
-    """
-    Save YOLO-format labels to a text file.
-    """
     if not labels:
         print(f"[INFO] No labels to save for {image_name}. Skipping label file.")
         return
@@ -71,6 +70,14 @@ def save_yolo_labels(output_labels_dir, image_name, labels):
             f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
     print(f"[✓] Saved labels: {label_file_path}")
+
+
+# ------------ FUNCTION: Distance Check ------------
+def is_far_enough(x, y, existing_centers, min_distance):
+    for ex, ey in existing_centers:
+        if math.hypot(x - ex, y - ey) < min_distance:
+            return False
+    return True
 
 
 # ------------ MAIN EXECUTION LOOP ------------
@@ -109,10 +116,13 @@ for annotation_file in os.listdir(dirs["annotation_dir"]):
             cv2.fillPoly(mask, [polygon_np], 255)
             margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
 
-            # Try placing a pore inside the polygon
-            placed = False
+            pore_centers = []
+            num_pores = random.randint(*NUM_PORES_PER_REGION)
+            placed = 0
             attempts = 0
-            while not placed and attempts < 100:
+            max_attempts = 200
+
+            while placed < num_pores and attempts < max_attempts:
                 pore_size = random.randint(40, 70)
                 pore_mask = generate_irregular_pore_mask(img_size=(pore_size, pore_size), base_radius=pore_size // 3)
 
@@ -124,20 +134,23 @@ for annotation_file in os.listdir(dirs["annotation_dir"]):
                     attempts += 1
                     continue
 
-                if np.all(region == 255):
-                    roi = image[y:y + pore_size, x:x + pore_size]
-                    alpha = pore_mask.astype(np.float32) / 255.0
-                    colored_pore = cv2.merge([pore_mask] * 3).astype(np.float32)
+                cx, cy = x + pore_size // 2, y + pore_size // 2
+                if not np.all(region == 255) or not is_far_enough(cx, cy, pore_centers, MIN_DISTANCE_BETWEEN_PORES):
+                    attempts += 1
+                    continue
 
-                    for c in range(3):
-                        roi[..., c] = (alpha * colored_pore[..., c] + (1 - alpha) * roi[..., c]).astype(np.uint8)
+                roi = image[y:y + pore_size, x:x + pore_size]
+                alpha = pore_mask.astype(np.float32) / 255.0
+                colored_pore = cv2.merge([pore_mask] * 3).astype(np.float32)
 
-                    cx, cy = x + pore_size // 2, y + pore_size // 2
-                    bw, bh = pore_size // 2, pore_size // 2
-                    label = (CLASS_ID, *convert_to_yolo_bbox(cx, cy, bw * 2, bh * 2, image_w, image_h))
-                    label_list.append(label)
-                    placed = True
+                for c in range(3):
+                    roi[..., c] = (alpha * colored_pore[..., c] + (1 - alpha) * roi[..., c]).astype(np.uint8)
 
+                bw, bh = pore_size // 2, pore_size // 2
+                label = (CLASS_ID, *convert_to_yolo_bbox(cx, cy, bw * 2, bh * 2, image_w, image_h))
+                label_list.append(label)
+                pore_centers.append((cx, cy))
+                placed += 1
                 attempts += 1
 
     save_img_path = os.path.join(dirs["output_images_dir"], image_name)
