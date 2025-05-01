@@ -15,10 +15,8 @@ dirs = {
 CLASS_ID = 0  # Singular pore
 BOUNDARY_MARGIN = 3
 
-os.makedirs(dirs["output_images_dir"], exist_ok=True)
-os.makedirs(dirs["output_labels_dir"], exist_ok=True)
 
-# ------------ FUNCTION: Pore Mask ------------
+# ------------ FUNCTION: Generate Pore Mask ------------
 def generate_irregular_pore_mask(img_size=(64, 64), base_radius=20, num_lobes=5, lobe_strength=0.25, blur_strength=3):
     h, w = img_size
     center = (w // 2, h // 2)
@@ -42,6 +40,7 @@ def generate_irregular_pore_mask(img_size=(64, 64), base_radius=20, num_lobes=5,
     cv2.fillPoly(mask, [points], 255)
     mask = cv2.GaussianBlur(mask, (blur_strength | 1, blur_strength | 1), sigmaX=2)
 
+    # Optional: add radial shading
     yy, xx = np.ogrid[:h, :w]
     dist = np.sqrt((xx - center[0])**2 + (yy - center[1])**2)
     gradient = 1 - np.clip(dist / (base_radius * 1.5), 0, 1)
@@ -49,11 +48,35 @@ def generate_irregular_pore_mask(img_size=(64, 64), base_radius=20, num_lobes=5,
 
     return mask
 
+
 # ------------ FUNCTION: Convert to YOLO format ------------
 def convert_to_yolo_bbox(x, y, w, h, img_w, img_h):
     return x / img_w, y / img_h, w / img_w, h / img_h
 
-# ------------ MAIN LOOP ------------
+
+# ------------ FUNCTION: Save YOLO Labels ------------
+def save_yolo_labels(output_labels_dir, image_name, labels):
+    """
+    Save YOLO-format labels to a text file.
+    """
+    if not labels:
+        print(f"[INFO] No labels to save for {image_name}. Skipping label file.")
+        return
+
+    label_file_path = os.path.join(output_labels_dir, os.path.splitext(image_name)[0] + ".txt")
+    os.makedirs(output_labels_dir, exist_ok=True)
+
+    with open(label_file_path, "w") as f:
+        for label in labels:
+            f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
+
+    print(f"[✓] Saved labels: {label_file_path}")
+
+
+# ------------ MAIN EXECUTION LOOP ------------
+os.makedirs(dirs["output_images_dir"], exist_ok=True)
+os.makedirs(dirs["output_labels_dir"], exist_ok=True)
+
 for annotation_file in os.listdir(dirs["annotation_dir"]):
     if not annotation_file.endswith(".txt"):
         continue
@@ -76,7 +99,7 @@ for annotation_file in os.listdir(dirs["annotation_dir"]):
         for line in f:
             parts = line.strip().split()
             if len(parts) < 9 or int(parts[0]) != 3:
-                continue  # We only care about class 3 polygons
+                continue
 
             polygon = list(map(float, parts[1:]))
             points = [(int(polygon[i] * image_w), int(polygon[i + 1] * image_h)) for i in range(0, len(polygon), 2)]
@@ -103,35 +126,20 @@ for annotation_file in os.listdir(dirs["annotation_dir"]):
 
                 if np.all(region == 255):
                     roi = image[y:y + pore_size, x:x + pore_size]
-                    mask_bool = pore_mask > 0
-                    colored_pore = cv2.merge([pore_mask] * 3)
-                    roi[mask_bool] = colored_pore[mask_bool]
+                    alpha = pore_mask.astype(np.float32) / 255.0
+                    colored_pore = cv2.merge([pore_mask] * 3).astype(np.float32)
 
-                    # Calculate bounding box and save annotation
+                    for c in range(3):
+                        roi[..., c] = (alpha * colored_pore[..., c] + (1 - alpha) * roi[..., c]).astype(np.uint8)
+
                     cx, cy = x + pore_size // 2, y + pore_size // 2
                     bw, bh = pore_size // 2, pore_size // 2
                     label = (CLASS_ID, *convert_to_yolo_bbox(cx, cy, bw * 2, bh * 2, image_w, image_h))
                     label_list.append(label)
                     placed = True
+
                 attempts += 1
 
-    # Save modified image
     save_img_path = os.path.join(dirs["output_images_dir"], image_name)
     cv2.imwrite(save_img_path, image)
-
-    # Save YOLO labels
-def save_yolo_labels(output_labels_dir, image_name, labels):
-    
-    if not labels:
-        print(f"[INFO] No labels to save for {image_name}. Skipping label file.")
-        return
-
-    label_file_path = os.path.join(output_labels_dir, os.path.splitext(image_name)[0] + ".txt")
-    os.makedirs(output_labels_dir, exist_ok=True)
-
-    with open(label_file_path, "w") as f:
-        for label in labels:
-            f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
-
-    print(f"[✓] Saved labels: {label_file_path}")
-
+    save_yolo_labels(dirs["output_labels_dir"], image_name, label_list)
