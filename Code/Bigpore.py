@@ -109,7 +109,9 @@ def draw_crescent_pore(image, x, y, short_axis, angle):
 
     # Create contours
     outer_arc = cv2.ellipse2Poly((x, y), (outer_radius_x, outer_radius_y), angle, start_angle, end_angle, 2)
-    inner_arc = cv2.ellipse2Poly((x, y), (inner_radius_x, inner_radius_y), angle, end_angle, start_angle, -2)
+    inner_arc = cv2.ellipse2Poly((x, y), (inner_radius_x, inner_radius_y), angle, start_angle, end_angle, 2)
+    inner_arc = np.flipud(inner_arc)  # reverse the order of points
+
 
     points = np.concatenate((outer_arc, inner_arc))
     points = points.reshape((-1, 1, 2))
