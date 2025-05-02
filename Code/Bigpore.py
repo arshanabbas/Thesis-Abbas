@@ -71,28 +71,37 @@ def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
 # Pore Drawing Functions
 # -----------------------
 
-def draw_elliptical_pore(image, x, y, short_axis, angle):
+def draw_irregular_elongated_pore(image, x, y, short_axis, angle):
     """
-    Draw an elongated elliptical pore with realistic shading and soft edges.
+    Draw an irregular, stretched pore (not a perfect ellipse).
+    Uses a wobbly polygon to simulate deformation.
     """
-    elongation_ratio = random.uniform(2.0, 3.0)
+    elongation_ratio = random.uniform(2.5, 4.0)
     long_axis = int(short_axis * elongation_ratio)
-    axes = (long_axis, short_axis)
 
-    h, w = image.shape[:2]
-    temp = np.zeros((h, w, 4), dtype=np.uint8)
+    num_points = 20
+    theta = np.linspace(0, 2 * np.pi, num_points)
+    r_long = long_axis
+    r_short = short_axis
 
-    # Draw soft-edged ellipse on temp layer (RGBA)
-    cv2.ellipse(temp, (x, y), axes, angle, 0, 360, (40, 40, 40, 255), -1, lineType=cv2.LINE_AA)
+    # Add small random noise to the boundary
+    r_variation = np.random.uniform(0.9, 1.1, size=theta.shape)
+    x_points = r_long * np.cos(theta) * r_variation
+    y_points = r_short * np.sin(theta) * r_variation
 
-    # Add Gaussian blur to alpha channel
-    temp[:, :, 3] = cv2.GaussianBlur(temp[:, :, 3], (9, 9), sigmaX=3)
+    # Rotate the shape
+    rot_rad = np.radians(angle)
+    cos_a, sin_a = np.cos(rot_rad), np.sin(rot_rad)
+    rotated = np.array([
+        x_points * cos_a - y_points * sin_a,
+        x_points * sin_a + y_points * cos_a
+    ])
 
-    # Alpha blend into image
-    alpha = temp[..., 3:] / 255.0
-    rgb = temp[..., :3]
-    for c in range(3):
-        image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
+    # Translate to center
+    pts = np.stack(rotated, axis=-1).astype(np.int32) + np.array([x, y])
+
+    # Draw filled shape
+    cv2.fillPoly(image, [pts], color=(30, 30, 30), lineType=cv2.LINE_AA)
 
 def draw_triangular_pore(image, center, size, angle):
     triangle = np.array([
@@ -178,7 +187,8 @@ def run_pipeline():
             if x is not None:
                 short_axis = random.randint(2, 3)
                 angle = random.randint(0, 180)
-                draw_elliptical_pore(image, x, y, short_axis, angle)
+                draw_irregular_elongated_pore(image, x, y, short_axis, angle)
+
 
         # Estimate max elongated bounding box
                 bbox_w = int(short_axis * 3.5) + PORE_PADDING
