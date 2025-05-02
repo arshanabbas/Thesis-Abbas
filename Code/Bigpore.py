@@ -93,31 +93,39 @@ def draw_elliptical_pore(image, x, y, short_axis, angle):
 
 def draw_crescent_pore(image, x, y, short_axis, angle):
     """
-    Improved crescent pore: asymmetric open arc with tapered tail.
-    Replaces ellipse fill with a crescent-shaped region.
+    Custom crescent pore drawn from scratch.
+    One sharp end, one wide belly. No blur or gradient.
     """
-    elongation_ratio = random.uniform(2.8, 3.5)
-    outer_radius_x = int(short_axis * elongation_ratio)
-    outer_radius_y = short_axis
+    elongation_ratio = random.uniform(3.0, 4.0)
+    width = int(short_axis * elongation_ratio)
+    height = short_axis
 
-    thickness = int(short_axis * 0.6)  # how hollow the crescent is
-    inner_radius_x = max(1, outer_radius_x - thickness)
-    inner_radius_y = max(1, outer_radius_y - thickness)
+    # Define control points for crescent shape manually
+    top = (x - width // 2, y)
+    bottom = (x + width // 2, y)
+    tip = (x, y - height)
+    tail = (x, y + height // 2)
 
-    start_angle = random.randint(160, 200)
-    end_angle = start_angle + random.randint(80, 100)
+    pts = np.array([
+        top,
+        (x - width // 4, y - height // 3),
+        tip,
+        (x + width // 4, y - height // 4),
+        bottom,
+        tail
+    ], dtype=np.int32).reshape((-1, 1, 2))
 
-    # Create contours
-    outer_arc = cv2.ellipse2Poly((x, y), (outer_radius_x, outer_radius_y), angle, start_angle, end_angle, 2)
-    inner_arc = cv2.ellipse2Poly((x, y), (inner_radius_x, inner_radius_y), angle, start_angle, end_angle, 2)
-    inner_arc = np.flipud(inner_arc)  # reverse the order of points
+    # Rotate shape around center
+    rot_rad = np.radians(angle)
+    rot_matrix = np.array([
+        [np.cos(rot_rad), -np.sin(rot_rad)],
+        [np.sin(rot_rad),  np.cos(rot_rad)]
+    ])
 
+    pts = np.dot(pts.reshape(-1, 2) - [x, y], rot_matrix.T) + [x, y]
+    pts = pts.astype(np.int32).reshape((-1, 1, 2))
 
-    points = np.concatenate((outer_arc, inner_arc))
-    points = points.reshape((-1, 1, 2))
-
-    # Draw filled crescent
-    cv2.fillPoly(image, [points], color=(30, 30, 30), lineType=cv2.LINE_AA)
+    cv2.fillPoly(image, [pts], color=(30, 30, 30), lineType=cv2.LINE_AA)
 
 # -----------------------
 # Main Pipeline
