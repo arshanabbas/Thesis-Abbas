@@ -71,8 +71,18 @@ def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
 # Pore Drawing Functions
 # -----------------------
 
-def draw_elliptical_pore(image, x, y, rw, rh, angle):
-    cv2.ellipse(image, (x, y), (rw, rh), angle, 0, 360, (50, 50, 50), -1, lineType=cv2.LINE_AA)
+def draw_elliptical_pore(image, x, y, short_axis, angle):
+    """
+    Draw an elongated ellipse pore with 2–3x elongation.
+    short_axis: base size (semi-minor axis), long_axis will be scaled
+    """
+    elongation_ratio = random.uniform(2.0, 3.0)  # more stretched
+    long_axis = int(short_axis * elongation_ratio)
+
+    # Randomly choose which is width/height depending on angle
+    axes = (long_axis, short_axis) if random.random() < 0.5 else (short_axis, long_axis)
+    
+    cv2.ellipse(image, (x, y), axes, angle, 0, 360, (50, 50, 50), -1, lineType=cv2.LINE_AA)
 
 def draw_triangular_pore(image, center, size, angle):
     triangle = np.array([
@@ -155,10 +165,9 @@ def run_pipeline():
         for _ in range(2):
             x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
             if x is not None:
-                rw = random.randint(3, 5)
-                rh = random.randint(2, 3)
+                short_axis = random.randint(2, 3)
                 angle = random.randint(0, 180)
-                draw_elliptical_pore(image, x, y, rw, rh, angle)
+                draw_elliptical_pore(image, x, y, short_axis, angle)
                 bx, by, bw, bh = convert_to_yolo_bbox(x, y, rw + PORE_PADDING, rh + PORE_PADDING, image.shape[1], image.shape[0])
                 yolo_labels.append((PORE_CLASS_ID, bx, by, bw, bh))
 
