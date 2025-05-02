@@ -67,75 +67,6 @@ def is_far_from_existing(x, y, r, placed_pores):
 def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
     return x / image_w, y / image_h, (2 * w) / image_w, (2 * h) / image_h
 
-# -----------------------
-# Pore Drawing Functions
-# -----------------------
-
-def draw_irregular_elongated_pore(image, x, y, short_axis, angle):
-    """
-    Draw an irregular, stretched pore (not a perfect ellipse).
-    Uses a wobbly polygon to simulate deformation.
-    """
-    elongation_ratio = random.uniform(2.5, 4.0)
-    long_axis = int(short_axis * elongation_ratio)
-
-    num_points = 20
-    theta = np.linspace(0, 2 * np.pi, num_points)
-    r_long = long_axis
-    r_short = short_axis
-
-    # Add small random noise to the boundary
-    r_variation = np.random.uniform(0.9, 1.1, size=theta.shape)
-    x_points = r_long * np.cos(theta) * r_variation
-    y_points = r_short * np.sin(theta) * r_variation
-
-    # Rotate the shape
-    rot_rad = np.radians(angle)
-    cos_a, sin_a = np.cos(rot_rad), np.sin(rot_rad)
-    rotated = np.array([
-        x_points * cos_a - y_points * sin_a,
-        x_points * sin_a + y_points * cos_a
-    ])
-
-    # Translate to center
-    pts = np.stack(rotated, axis=-1).astype(np.int32) + np.array([x, y])
-
-    # Draw filled shape
-    cv2.fillPoly(image, [pts], color=(30, 30, 30), lineType=cv2.LINE_AA)
-
-def draw_triangular_pore(image, center, size, angle):
-    triangle = np.array([
-        [0, -size],
-        [-size, size],
-        [size, size]
-    ], dtype=np.float32)
-    theta = np.radians(angle)
-    rot = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-    rotated = triangle @ rot.T + np.array(center)
-    mask = np.zeros_like(image[:, :, 0])
-    cv2.fillConvexPoly(mask, rotated.astype(np.int32), color=255)
-    mask = cv2.GaussianBlur(mask, (11, 11), 0)
-    for c in range(3):
-        image[..., c] = np.where(mask > 0, (image[..., c] * (1 - mask / 255) + 40 * (mask / 255)).astype(np.uint8), image[..., c])
-
-def draw_comet_pore(image, center, radius, angle):
-    h, w = image.shape[:2]
-    overlay = np.zeros((h, w, 4), dtype=np.uint8)
-    cv2.ellipse(overlay, center, (radius, radius), 0, 0, 360, (50, 50, 50, 255), -1, lineType=cv2.LINE_AA)
-    tail_len = radius * 3
-    tail_center = (
-        int(center[0] + tail_len * math.cos(math.radians(angle))),
-        int(center[1] + tail_len * math.sin(math.radians(angle)))
-    )
-    cv2.ellipse(overlay, tail_center, (tail_len, radius), angle, 0, 360, (40, 40, 40, 100), -1, lineType=cv2.LINE_AA)
-    rgb, alpha = overlay[..., :3], overlay[..., 3:] / 255.0
-    for c in range(3):
-        image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
-
-# -----------------------
-# Pore Generator
-# -----------------------
-
 def place_custom_pore(mask, margin_mask, placed_pores, image_shape):
     h, w = image_shape[:2]
     max_attempts = 1000
@@ -149,6 +80,32 @@ def place_custom_pore(mask, margin_mask, placed_pores, image_shape):
             placed_pores.append((x, y, r))
             return x, y
     return None, None
+
+# -----------------------
+# Pore Drawing Functions
+# -----------------------
+
+def draw_elliptical_pore(image, x, y, short_axis, angle):
+    elongation_ratio = random.uniform(2.5, 3.5)
+    long_axis = int(short_axis * elongation_ratio)
+    axes = (long_axis, short_axis)
+    cv2.ellipse(image, (x, y), axes, angle, 0, 360, (30, 30, 30), -1, lineType=cv2.LINE_AA)
+
+def draw_crescent_pore(image, x, y, short_axis, angle):
+    """
+    Replicates the crescent-shaped pore you provided as reference.
+    Drawn as a filled elliptical arc — no blur.
+    """
+    elongation_ratio = random.uniform(2.5, 3.5)
+    long_axis = int(short_axis * elongation_ratio)
+    axes = (long_axis, short_axis)
+
+    mask = np.zeros_like(image[:, :, 0])
+    arc_start = random.randint(160, 200)
+    arc_end = arc_start + random.randint(80, 100)  # curved crescent
+
+    cv2.ellipse(mask, (x, y), axes, angle, arc_start, arc_end, 255, -1, lineType=cv2.LINE_AA)
+    image[mask == 255] = (30, 30, 30)
 
 # -----------------------
 # Main Pipeline
@@ -180,39 +137,26 @@ def run_pipeline():
         placed_pores = []
         yolo_labels = []
 
-        # 1. Two elliptical pores
-        # 1. Two elliptical pores (stretched)
-        for _ in range(2):
-            x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
-            if x is not None:
-                short_axis = random.randint(2, 3)
-                angle = random.randint(0, 180)
-                draw_irregular_elongated_pore(image, x, y, short_axis, angle)
-
-
-        # Estimate max elongated bounding box
-                bbox_w = int(short_axis * 3.5) + PORE_PADDING
-                bbox_h = int(short_axis * 1.5) + PORE_PADDING
-                bx, by, bw, bh = convert_to_yolo_bbox(x, y, bbox_w, bbox_h, image.shape[1], image.shape[0])
-                yolo_labels.append((PORE_CLASS_ID, bx, by, bw, bh))
-
-
-        # 2. One triangular pore
+        # First: Crescent-shaped pore
+        short_axis = random.randint(4, 6)
+        angle = random.randint(0, 180)
         x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
         if x is not None:
-            size = random.randint(10, 16)
-            angle = random.randint(0, 360)
-            draw_triangular_pore(image, (x, y), size, angle)
-            bx, by, bw, bh = convert_to_yolo_bbox(x, y, size + PORE_PADDING, size + PORE_PADDING, image.shape[1], image.shape[0])
+            draw_crescent_pore(image, x, y, short_axis, angle)
+            bbox_w = int(short_axis * 3.5) + PORE_PADDING
+            bbox_h = int(short_axis * 1.5) + PORE_PADDING
+            bx, by, bw, bh = convert_to_yolo_bbox(x, y, bbox_w, bbox_h, image.shape[1], image.shape[0])
             yolo_labels.append((PORE_CLASS_ID, bx, by, bw, bh))
 
-        # 3. One comet-shaped pore
+        # Second: Sharp elliptical pore
+        short_axis = random.randint(5, 6)
+        angle = random.randint(0, 180)
         x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
         if x is not None:
-            radius = random.randint(4, 6)
-            angle = random.randint(0, 360)
-            draw_comet_pore(image, (x, y), radius, angle)
-            bx, by, bw, bh = convert_to_yolo_bbox(x, y, radius + PORE_PADDING, radius + PORE_PADDING, image.shape[1], image.shape[0])
+            draw_elliptical_pore(image, x, y, short_axis, angle)
+            bbox_w = int(short_axis * 3.5) + PORE_PADDING
+            bbox_h = int(short_axis * 1.5) + PORE_PADDING
+            bx, by, bw, bh = convert_to_yolo_bbox(x, y, bbox_w, bbox_h, image.shape[1], image.shape[0])
             yolo_labels.append((PORE_CLASS_ID, bx, by, bw, bh))
 
         # Save outputs
@@ -224,7 +168,7 @@ def run_pipeline():
             for label in yolo_labels:
                 f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
-        print(f"✅ Placed 4 pores in {filename} — saved to output")
+        print(f"✅ Added 2 pores to {filename} — saved")
 
 if __name__ == "__main__":
     run_pipeline()
