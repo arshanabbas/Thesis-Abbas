@@ -12,7 +12,7 @@ dirs = {
     "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
 }
 
-CLASS_ID = 0  # Singular pore
+CLASS_ID = 0
 BOUNDARY_MARGIN = 3
 NUM_PORES_PER_REGION = (3, 6)
 MIN_DISTANCE_BETWEEN_PORES = 25
@@ -25,7 +25,7 @@ def generate_irregular_pore_mask(
     num_lobes=5,
     lobe_strength=0.25,
     blur_strength=3,
-    noise_strength=0.3
+    noise_strength=0.2
 ):
     h, w = img_size
     center = (w // 2, h // 2)
@@ -51,8 +51,8 @@ def generate_irregular_pore_mask(
 
     yy, xx = np.ogrid[:h, :w]
     dist = np.sqrt((xx - center[0])**2 + (yy - center[1])**2)
-    gradient = 1 - np.clip(dist / (base_radius * 1.2), 0, 1)
-    gradient = (gradient ** 2.0)
+    gradient = 1 - np.clip(dist / (base_radius * 1.3), 0, 1)
+    gradient = gradient ** 1.3
     dark_mask = (mask * gradient).astype(np.uint8)
 
     noise = (np.random.rand(h, w) * 255).astype(np.uint8)
@@ -60,6 +60,7 @@ def generate_irregular_pore_mask(
     noise_normalized = noise / 255.0
     textured = (dark_mask * (1 - noise_strength) + dark_mask * noise_normalized * noise_strength).astype(np.uint8)
 
+    textured = np.clip(textured, 25, 255)
     return textured
 
 
@@ -152,7 +153,12 @@ for annotation_file in os.listdir(dirs["annotation_dir"]):
                     continue
 
                 roi = image[y:y + pore_size, x:x + pore_size]
+
+                # --- Improved Alpha Blending ---
                 alpha = pore_mask.astype(np.float32) / 255.0
+                alpha = cv2.GaussianBlur(alpha, (5, 5), sigmaX=1.5)
+                alpha = np.clip(alpha, 0.2, 1.0)  # Prevent invisibly low values
+
                 colored_pore = cv2.merge([pore_mask] * 3).astype(np.float32)
 
                 for c in range(3):
