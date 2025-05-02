@@ -93,19 +93,29 @@ def draw_elliptical_pore(image, x, y, short_axis, angle):
 
 def draw_crescent_pore(image, x, y, short_axis, angle):
     """
-    Replicates the crescent-shaped pore you provided as reference.
-    Drawn as a filled elliptical arc — no blur.
+    Improved crescent pore: asymmetric open arc with tapered tail.
+    Replaces ellipse fill with a crescent-shaped region.
     """
-    elongation_ratio = random.uniform(2.5, 3.5)
-    long_axis = int(short_axis * elongation_ratio)
-    axes = (long_axis, short_axis)
+    elongation_ratio = random.uniform(2.8, 3.5)
+    outer_radius_x = int(short_axis * elongation_ratio)
+    outer_radius_y = short_axis
 
-    mask = np.zeros_like(image[:, :, 0])
-    arc_start = random.randint(160, 200)
-    arc_end = arc_start + random.randint(80, 100)  # curved crescent
+    thickness = int(short_axis * 0.6)  # how hollow the crescent is
+    inner_radius_x = max(1, outer_radius_x - thickness)
+    inner_radius_y = max(1, outer_radius_y - thickness)
 
-    cv2.ellipse(mask, (x, y), axes, angle, arc_start, arc_end, 255, -1, lineType=cv2.LINE_AA)
-    image[mask == 255] = (30, 30, 30)
+    start_angle = random.randint(160, 200)
+    end_angle = start_angle + random.randint(80, 100)
+
+    # Create contours
+    outer_arc = cv2.ellipse2Poly((x, y), (outer_radius_x, outer_radius_y), angle, start_angle, end_angle, 2)
+    inner_arc = cv2.ellipse2Poly((x, y), (inner_radius_x, inner_radius_y), angle, end_angle, start_angle, -2)
+
+    points = np.concatenate((outer_arc, inner_arc))
+    points = points.reshape((-1, 1, 2))
+
+    # Draw filled crescent
+    cv2.fillPoly(image, [points], color=(30, 30, 30), lineType=cv2.LINE_AA)
 
 # -----------------------
 # Main Pipeline
