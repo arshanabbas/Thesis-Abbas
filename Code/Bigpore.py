@@ -93,18 +93,18 @@ def draw_elliptical_pore(image, x, y, short_axis, angle):
 
 def draw_crescent_pore(image, x, y, short_axis, angle):
     """
-    Custom crescent pore drawn from scratch.
-    One sharp end, one wide belly. No blur or gradient.
+    Crescent pore with high elongation and slim body.
+    One sharp end, one open side.
     """
-    elongation_ratio = random.uniform(3.0, 4.0)
+    elongation_ratio = random.uniform(4.0, 5.0)  # more stretched
     width = int(short_axis * elongation_ratio)
-    height = short_axis
+    height = int(short_axis * 0.8)  # slimmer
 
-    # Define control points for crescent shape manually
+    # Key control points for crescent
     top = (x - width // 2, y)
     bottom = (x + width // 2, y)
     tip = (x, y - height)
-    tail = (x, y + height // 2)
+    tail = (x, y + height // 3)
 
     pts = np.array([
         top,
@@ -115,13 +115,12 @@ def draw_crescent_pore(image, x, y, short_axis, angle):
         tail
     ], dtype=np.int32).reshape((-1, 1, 2))
 
-    # Rotate shape around center
+    # Rotate the entire shape
     rot_rad = np.radians(angle)
     rot_matrix = np.array([
         [np.cos(rot_rad), -np.sin(rot_rad)],
         [np.sin(rot_rad),  np.cos(rot_rad)]
     ])
-
     pts = np.dot(pts.reshape(-1, 2) - [x, y], rot_matrix.T) + [x, y]
     pts = pts.astype(np.int32).reshape((-1, 1, 2))
 
