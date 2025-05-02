@@ -73,16 +73,26 @@ def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
 
 def draw_elliptical_pore(image, x, y, short_axis, angle):
     """
-    Draw an elongated ellipse pore with 2–3x elongation.
-    short_axis: base size (semi-minor axis), long_axis will be scaled
+    Draw an elongated elliptical pore with realistic shading and soft edges.
     """
-    elongation_ratio = random.uniform(2.0, 3.0)  # more stretched
+    elongation_ratio = random.uniform(2.0, 3.0)
     long_axis = int(short_axis * elongation_ratio)
+    axes = (long_axis, short_axis)
 
-    # Randomly choose which is width/height depending on angle
-    axes = (long_axis, short_axis) if random.random() < 0.5 else (short_axis, long_axis)
-    
-    cv2.ellipse(image, (x, y), axes, angle, 0, 360, (50, 50, 50), -1, lineType=cv2.LINE_AA)
+    h, w = image.shape[:2]
+    temp = np.zeros((h, w, 4), dtype=np.uint8)
+
+    # Draw soft-edged ellipse on temp layer (RGBA)
+    cv2.ellipse(temp, (x, y), axes, angle, 0, 360, (40, 40, 40, 255), -1, lineType=cv2.LINE_AA)
+
+    # Add Gaussian blur to alpha channel
+    temp[:, :, 3] = cv2.GaussianBlur(temp[:, :, 3], (9, 9), sigmaX=3)
+
+    # Alpha blend into image
+    alpha = temp[..., 3:] / 255.0
+    rgb = temp[..., :3]
+    for c in range(3):
+        image[..., c] = (alpha[..., 0] * rgb[..., c] + (1 - alpha[..., 0]) * image[..., c]).astype(np.uint8)
 
 def draw_triangular_pore(image, center, size, angle):
     triangle = np.array([
@@ -162,14 +172,20 @@ def run_pipeline():
         yolo_labels = []
 
         # 1. Two elliptical pores
+        # 1. Two elliptical pores (stretched)
         for _ in range(2):
             x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
             if x is not None:
                 short_axis = random.randint(2, 3)
                 angle = random.randint(0, 180)
                 draw_elliptical_pore(image, x, y, short_axis, angle)
-                bx, by, bw, bh = convert_to_yolo_bbox(x, y, rw + PORE_PADDING, rh + PORE_PADDING, image.shape[1], image.shape[0])
+
+        # Estimate max elongated bounding box
+                bbox_w = int(short_axis * 3.5) + PORE_PADDING
+                bbox_h = int(short_axis * 1.5) + PORE_PADDING
+                bx, by, bw, bh = convert_to_yolo_bbox(x, y, bbox_w, bbox_h, image.shape[1], image.shape[0])
                 yolo_labels.append((PORE_CLASS_ID, bx, by, bw, bh))
+
 
         # 2. One triangular pore
         x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
