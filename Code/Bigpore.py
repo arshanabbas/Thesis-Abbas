@@ -1,8 +1,8 @@
 import os
 import cv2
 import numpy as np
-import math
 import random
+import math
 
 # -----------------------
 # Dataset Paths
@@ -18,44 +18,34 @@ os.makedirs(dirs["output_images_dir"], exist_ok=True)
 os.makedirs(dirs["output_labels_dir"], exist_ok=True)
 
 # -----------------------
-# Configuration
-# -----------------------
-PORE_CLASS_ID = 0
-BOUNDARY_MARGIN = 4
-MIN_DISTANCE_BETWEEN_PORES = 15
-PORE_PADDING = 6
-
-# -----------------------
 # Helper Functions
 # -----------------------
 
+PORE_CLASS_ID = 0
+BOUNDARY_MARGIN = 4
+PORE_PADDING = 6
+MIN_DISTANCE_BETWEEN_PORES = 15
+
 def load_image(image_path):
-    return cv2.imread(image_path, cv2.IMREAD_COLOR)
+    return cv2.imread(image_path)
 
 def parse_yolo_polygon_annotation(annotation_path, image_shape):
     h, w = image_shape[:2]
     polygons = []
-
     with open(annotation_path, 'r') as f:
         for line in f:
             parts = line.strip().split()
-            if len(parts) < 3:
-                continue
-            class_id = int(parts[0])
-            if class_id != 3:
+            if int(parts[0]) != 3:
                 continue
             coords = list(map(float, parts[1:]))
-            if len(coords) % 2 != 0:
-                continue
             points = [(int(x * w), int(y * h)) for x, y in zip(coords[::2], coords[1::2])]
             polygons.append(np.array(points, dtype=np.int32))
-
     return polygons
 
 def polygon_to_mask(image_shape, polygons):
     mask = np.zeros(image_shape[:2], dtype=np.uint8)
     if polygons:
-        cv2.fillPoly(mask, polygons, color=255)
+        cv2.fillPoly(mask, polygons, 255)
     return mask
 
 def is_far_from_existing(x, y, r, placed_pores):
@@ -67,66 +57,51 @@ def is_far_from_existing(x, y, r, placed_pores):
 def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
     return x / image_w, y / image_h, (2 * w) / image_w, (2 * h) / image_h
 
-def place_custom_pore(mask, margin_mask, placed_pores, image_shape):
-    h, w = image_shape[:2]
-    max_attempts = 1000
-    for _ in range(max_attempts):
-        x = random.randint(0, w - 1)
-        y = random.randint(0, h - 1)
-        if margin_mask[y, x] != 255:
-            continue
-        r = 10
-        if is_far_from_existing(x, y, r, placed_pores):
-            placed_pores.append((x, y, r))
-            return x, y
-    return None, None
-
 # -----------------------
-# Crescent Pore Drawing Function
+# Final Crescent Drawing Function
 # -----------------------
 
-def draw_asymmetric_crescent_pore(image, x, y, scale=1.0, angle=0):
-    """
-    Draws a crescent-shaped pore:
-    - Sharp northern edge
-    - Smooth southern curve
-    - Solid and clean, no blur
-    """
-    # Define top (north) side — angular, structured
-    top_pts = np.array([
-        (-30, 5),   # far left
-        (-15, -8),  # rise
-        (0, -12),   # sharp peak
-        (18, -6),   # drop
-        (25, 4),    # near lower right
-    ], dtype=np.float32)
+def draw_crescent_pore(image, x, y, scale=0.5, angle=0, r_west=12, r_east=4):
+    # WEST (left dome arc)
+    western_arc = []
+    center_w = (-15, 0)
+    for theta in np.linspace(180, 270, 10):
+        rad = np.radians(theta)
+        xw = center_w[0] + r_west * np.cos(rad)
+        yw = center_w[1] + r_west * np.sin(rad)
+        western_arc.append((xw, yw))
 
-    # Bottom (south) side — gentle arc
-    bottom_pts = []
-    for t in np.linspace(0, 1, 10):
-        xt = (1 - t) * 25 + t * (-10)
-        yt = 4 + 6 * np.sin(t * np.pi)  # gentle downward bulge
-        bottom_pts.append((xt, yt))
-    bottom_pts = np.array(bottom_pts, dtype=np.float32)
+    # EAST (right dome arc)
+    eastern_arc = []
+    center_e = (22, 0)
+    for theta in np.linspace(270, 360, 10):
+        rad = np.radians(theta)
+        xe = center_e[0] + r_east * np.cos(rad)
+        ye = center_e[1] + r_east * np.sin(rad)
+        eastern_arc.append((xe, ye))
 
-    # Combine points and apply scaling
-    all_pts = np.vstack([top_pts, bottom_pts])
-    all_pts *= scale
+    # TOP AND BOTTOM
+    mid_top = [(0, -12), (18, -6)]
+    bottom = []
+    for t in np.linspace(0, 1, 20):
+        xt = (1 - t) * (center_e[0] - r_east) + t * (-10)
+        yt = 4 + 6 * np.sin(t * np.pi)
+        bottom.append((xt, yt))
 
-    # Rotate and translate to (x, y)
-    theta = np.radians(angle)
+    # Transform
+    all_pts = np.vstack([western_arc, mid_top, eastern_arc, bottom])
+    theta_rad = np.radians(angle)
     rot_matrix = np.array([
-        [np.cos(theta), -np.sin(theta)],
-        [np.sin(theta),  np.cos(theta)],
+        [np.cos(theta_rad), -np.sin(theta_rad)],
+        [np.sin(theta_rad),  np.cos(theta_rad)]
     ])
-    rotated = np.dot(all_pts, rot_matrix.T) + [x, y]
-    contour = rotated.astype(np.int32).reshape((-1, 1, 2))
+    transformed = np.dot(all_pts * scale, rot_matrix.T) + [x, y]
+    contour = transformed.astype(np.int32).reshape((-1, 1, 2))
 
-    # Draw filled pore
-    cv2.fillPoly(image, [contour], color=(30, 30, 30), lineType=cv2.LINE_AA)
+    cv2.fillPoly(image, [contour], (30, 30, 30), lineType=cv2.LINE_AA)
 
 # -----------------------
-# Main Pipeline
+# Pipeline
 # -----------------------
 
 def run_pipeline():
@@ -139,44 +114,41 @@ def run_pipeline():
         annotation_path = os.path.join(dirs["annotation_dir"], base_name + ".txt")
 
         if not os.path.exists(annotation_path):
-            print(f"⚠️ Skipping {filename} (no annotation found)")
+            print(f"⚠️ Skipping {filename} (no annotation)")
             continue
 
         image = load_image(image_path)
         if image is None:
-            print(f"❌ Failed to load image: {image_path}")
             continue
 
         polygons = parse_yolo_polygon_annotation(annotation_path, image.shape)
         mask = polygon_to_mask(image.shape, polygons)
-        kernel_size = 2 * BOUNDARY_MARGIN + 1
-        margin_mask = cv2.erode(mask, np.ones((kernel_size, kernel_size), np.uint8))
+        margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
 
         placed_pores = []
         yolo_labels = []
 
-        # Draw 1–2 crescent pores per image
-        for _ in range(2):
-            x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
-            if x is not None:
-                scale = random.uniform(0.8, 1.2)
-                angle = random.randint(0, 360)
-                draw_asymmetric_crescent_pore(image, x, y, scale=scale, angle=angle)
-                bbox_w = int(30 * scale) + PORE_PADDING
-                bbox_h = int(15 * scale) + PORE_PADDING
-                bx, by, bw, bh = convert_to_yolo_bbox(x, y, bbox_w, bbox_h, image.shape[1], image.shape[0])
-                yolo_labels.append((PORE_CLASS_ID, bx, by, bw, bh))
+        for _ in range(2):  # Add two crescent pores per image
+            for _ in range(1000):
+                x = random.randint(0, image.shape[1] - 1)
+                y = random.randint(0, image.shape[0] - 1)
+                if margin_mask[y, x] == 255 and is_far_from_existing(x, y, 10, placed_pores):
+                    angle = random.randint(0, 360)
+                    scale = random.uniform(0.9, 1.2)
+                    draw_final_crescent_pore(image, x, y, scale=scale, angle=angle)
+                    bw, bh = int(30 * scale) + PORE_PADDING, int(15 * scale) + PORE_PADDING
+                    bbox = convert_to_yolo_bbox(x, y, bw, bh, image.shape[1], image.shape[0])
+                    yolo_labels.append((PORE_CLASS_ID, *bbox))
+                    placed_pores.append((x, y, 10))
+                    break
 
-        # Save outputs
-        output_img_path = os.path.join(dirs["output_images_dir"], filename)
-        output_lbl_path = os.path.join(dirs["output_labels_dir"], base_name + ".txt")
-        cv2.imwrite(output_img_path, image)
-
-        with open(output_lbl_path, "w") as f:
+        # Save
+        cv2.imwrite(os.path.join(dirs["output_images_dir"], filename), image)
+        with open(os.path.join(dirs["output_labels_dir"], base_name + ".txt"), "w") as f:
             for label in yolo_labels:
                 f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
-        print(f"✅ Added crescent pores to {filename}")
+        print(f"✅ Processed {filename}")
 
 if __name__ == "__main__":
     run_pipeline()
