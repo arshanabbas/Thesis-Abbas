@@ -82,52 +82,48 @@ def place_custom_pore(mask, margin_mask, placed_pores, image_shape):
     return None, None
 
 # -----------------------
-# Pore Drawing Functions
+# Crescent Pore Drawing Function
 # -----------------------
 
-def draw_elliptical_pore(image, x, y, short_axis, angle):
-    elongation_ratio = random.uniform(2.5, 3.5)
-    long_axis = int(short_axis * elongation_ratio)
-    axes = (long_axis, short_axis)
-    cv2.ellipse(image, (x, y), axes, angle, 0, 360, (30, 30, 30), -1, lineType=cv2.LINE_AA)
-
-def draw_soft_crescent_pore(image, x, y, scale=1.0, angle=0):
-    h, w = image.shape[:2]
-    overlay = np.zeros((h, w, 4), dtype=np.uint8)
-
-    # Scaled crescent points (hand-crafted shape)
-    base_pts = np.array([
-        (20, 55),
-        (35, 42),
-        (52, 38),
-        (70, 44),
-        (78, 53),
-        (64, 63),
-        (38, 66),
+def draw_asymmetric_crescent_pore(image, x, y, scale=1.0, angle=0):
+    """
+    Draws a crescent-shaped pore:
+    - Sharp northern edge
+    - Smooth southern curve
+    - Solid and clean, no blur
+    """
+    # Define top (north) side — angular, structured
+    top_pts = np.array([
+        (-30, 5),   # far left
+        (-15, -8),  # rise
+        (0, -12),   # sharp peak
+        (18, -6),   # drop
+        (25, 4),    # near lower right
     ], dtype=np.float32)
 
-    # Apply scale and center
-    base_pts = (base_pts - [50, 50]) * scale + [x, y]
+    # Bottom (south) side — gentle arc
+    bottom_pts = []
+    for t in np.linspace(0, 1, 10):
+        xt = (1 - t) * 25 + t * (-10)
+        yt = 4 + 6 * np.sin(t * np.pi)  # gentle downward bulge
+        bottom_pts.append((xt, yt))
+    bottom_pts = np.array(bottom_pts, dtype=np.float32)
 
-    # Apply rotation
-    angle_rad = np.radians(angle)
+    # Combine points and apply scaling
+    all_pts = np.vstack([top_pts, bottom_pts])
+    all_pts *= scale
+
+    # Rotate and translate to (x, y)
+    theta = np.radians(angle)
     rot_matrix = np.array([
-        [np.cos(angle_rad), -np.sin(angle_rad)],
-        [np.sin(angle_rad),  np.cos(angle_rad)],
+        [np.cos(theta), -np.sin(theta)],
+        [np.sin(theta),  np.cos(theta)],
     ])
-    rotated_pts = np.dot(base_pts - [x, y], rot_matrix.T) + [x, y]
-    pts = rotated_pts.astype(np.int32).reshape((-1, 1, 2))
+    rotated = np.dot(all_pts, rot_matrix.T) + [x, y]
+    contour = rotated.astype(np.int32).reshape((-1, 1, 2))
 
-    # Draw pore onto overlay with full opacity
-    cv2.fillPoly(overlay, [pts], color=(30, 30, 30, 255), lineType=cv2.LINE_AA)
-
-    # Light Gaussian blur on alpha for soft edge
-    overlay[:, :, 3] = cv2.GaussianBlur(overlay[:, :, 3], (3, 3), sigmaX=0.8)
-
-    # Alpha blend into the image
-    alpha = overlay[:, :, 3] / 255.0
-    for c in range(3):
-        image[:, :, c] = (alpha * overlay[:, :, c] + (1 - alpha) * image[:, :, c]).astype(np.uint8)
+    # Draw filled pore
+    cv2.fillPoly(image, [contour], color=(30, 30, 30), lineType=cv2.LINE_AA)
 
 # -----------------------
 # Main Pipeline
@@ -159,27 +155,17 @@ def run_pipeline():
         placed_pores = []
         yolo_labels = []
 
-        # First: Crescent-shaped pore
-        short_axis = random.randint(4, 6)
-        angle = random.randint(0, 180)
-        x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
-        if x is not None:
-            draw_soft_crescent_pore(image, x, y, scale=1.0, angle=random.randint(0, 360))
-            bbox_w = int(short_axis * 3.5) + PORE_PADDING
-            bbox_h = int(short_axis * 1.5) + PORE_PADDING
-            bx, by, bw, bh = convert_to_yolo_bbox(x, y, bbox_w, bbox_h, image.shape[1], image.shape[0])
-            yolo_labels.append((PORE_CLASS_ID, bx, by, bw, bh))
-
-        # Second: Sharp elliptical pore
-        short_axis = random.randint(5, 6)
-        angle = random.randint(0, 180)
-        x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
-        if x is not None:
-            draw_elliptical_pore(image, x, y, short_axis, angle)
-            bbox_w = int(short_axis * 3.5) + PORE_PADDING
-            bbox_h = int(short_axis * 1.5) + PORE_PADDING
-            bx, by, bw, bh = convert_to_yolo_bbox(x, y, bbox_w, bbox_h, image.shape[1], image.shape[0])
-            yolo_labels.append((PORE_CLASS_ID, bx, by, bw, bh))
+        # Draw 1–2 crescent pores per image
+        for _ in range(2):
+            x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
+            if x is not None:
+                scale = random.uniform(0.8, 1.2)
+                angle = random.randint(0, 360)
+                draw_asymmetric_crescent_pore(image, x, y, scale=scale, angle=angle)
+                bbox_w = int(30 * scale) + PORE_PADDING
+                bbox_h = int(15 * scale) + PORE_PADDING
+                bx, by, bw, bh = convert_to_yolo_bbox(x, y, bbox_w, bbox_h, image.shape[1], image.shape[0])
+                yolo_labels.append((PORE_CLASS_ID, bx, by, bw, bh))
 
         # Save outputs
         output_img_path = os.path.join(dirs["output_images_dir"], filename)
@@ -190,7 +176,7 @@ def run_pipeline():
             for label in yolo_labels:
                 f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
-        print(f"✅ Added 2 pores to {filename} — saved")
+        print(f"✅ Added crescent pores to {filename}")
 
 if __name__ == "__main__":
     run_pipeline()
