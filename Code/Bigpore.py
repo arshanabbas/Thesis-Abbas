@@ -134,19 +134,27 @@ def run_pipeline():
                 y = random.randint(0, image.shape[0] - 1)
                 if margin_mask[y, x] == 255 and is_far_from_existing(x, y, 10, placed_pores):
                     angle = random.randint(0, 360)
-                    scale = random.uniform(0.9, 1.2)
-                    draw_final_crescent_pore(image, x, y, scale=scale, angle=angle)
+                    scale = random.uniform(0.45, 0.6)
+                    r_west = random.randint(8, 16)
+                    r_east = random.randint(2, 5)
+
+                    draw_crescent_pore(image, x, y, scale=scale, angle=angle, r_west=r_west, r_east=r_east)
+
+                    # Estimate bounding box size
                     bw, bh = int(30 * scale) + PORE_PADDING, int(15 * scale) + PORE_PADDING
                     bbox = convert_to_yolo_bbox(x, y, bw, bh, image.shape[1], image.shape[0])
                     yolo_labels.append((PORE_CLASS_ID, *bbox))
                     placed_pores.append((x, y, 10))
                     break
 
-        # Save
+        # Save modified image and label
         cv2.imwrite(os.path.join(dirs["output_images_dir"], filename), image)
         with open(os.path.join(dirs["output_labels_dir"], base_name + ".txt"), "w") as f:
             for label in yolo_labels:
                 f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
+        
+
+        print(f"Number of labels for {filename}: {len(yolo_labels)}")
 
         print(f"✅ Processed {filename}")
 
