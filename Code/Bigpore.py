@@ -91,40 +91,43 @@ def draw_elliptical_pore(image, x, y, short_axis, angle):
     axes = (long_axis, short_axis)
     cv2.ellipse(image, (x, y), axes, angle, 0, 360, (30, 30, 30), -1, lineType=cv2.LINE_AA)
 
-def draw_crescent_pore(image, x, y, short_axis, angle):
-    """
-    Crescent pore with high elongation and slim body.
-    One sharp end, one open side.
-    """
-    elongation_ratio = random.uniform(4.0, 5.0)  # more stretched
-    width = int(short_axis * elongation_ratio)
-    height = int(short_axis * 0.8)  # slimmer
+def draw_soft_crescent_pore(image, x, y, scale=1.0, angle=0):
+    h, w = image.shape[:2]
+    overlay = np.zeros((h, w, 4), dtype=np.uint8)
 
-    # Key control points for crescent
-    top = (x - width // 2, y)
-    bottom = (x + width // 2, y)
-    tip = (x, y - height)
-    tail = (x, y + height // 3)
+    # Scaled crescent points (hand-crafted shape)
+    base_pts = np.array([
+        (20, 55),
+        (35, 42),
+        (52, 38),
+        (70, 44),
+        (78, 53),
+        (64, 63),
+        (38, 66),
+    ], dtype=np.float32)
 
-    pts = np.array([
-        top,
-        (x - width // 4, y - height // 3),
-        tip,
-        (x + width // 4, y - height // 4),
-        bottom,
-        tail
-    ], dtype=np.int32).reshape((-1, 1, 2))
+    # Apply scale and center
+    base_pts = (base_pts - [50, 50]) * scale + [x, y]
 
-    # Rotate the entire shape
-    rot_rad = np.radians(angle)
+    # Apply rotation
+    angle_rad = np.radians(angle)
     rot_matrix = np.array([
-        [np.cos(rot_rad), -np.sin(rot_rad)],
-        [np.sin(rot_rad),  np.cos(rot_rad)]
+        [np.cos(angle_rad), -np.sin(angle_rad)],
+        [np.sin(angle_rad),  np.cos(angle_rad)],
     ])
-    pts = np.dot(pts.reshape(-1, 2) - [x, y], rot_matrix.T) + [x, y]
-    pts = pts.astype(np.int32).reshape((-1, 1, 2))
+    rotated_pts = np.dot(base_pts - [x, y], rot_matrix.T) + [x, y]
+    pts = rotated_pts.astype(np.int32).reshape((-1, 1, 2))
 
-    cv2.fillPoly(image, [pts], color=(30, 30, 30), lineType=cv2.LINE_AA)
+    # Draw pore onto overlay with full opacity
+    cv2.fillPoly(overlay, [pts], color=(30, 30, 30, 255), lineType=cv2.LINE_AA)
+
+    # Light Gaussian blur on alpha for soft edge
+    overlay[:, :, 3] = cv2.GaussianBlur(overlay[:, :, 3], (3, 3), sigmaX=0.8)
+
+    # Alpha blend into the image
+    alpha = overlay[:, :, 3] / 255.0
+    for c in range(3):
+        image[:, :, c] = (alpha * overlay[:, :, c] + (1 - alpha) * image[:, :, c]).astype(np.uint8)
 
 # -----------------------
 # Main Pipeline
@@ -161,7 +164,7 @@ def run_pipeline():
         angle = random.randint(0, 180)
         x, y = place_custom_pore(mask, margin_mask, placed_pores, image.shape)
         if x is not None:
-            draw_crescent_pore(image, x, y, short_axis, angle)
+            draw_soft_crescent_pore(image, x, y, scale=1.0, angle=random.randint(0, 360))
             bbox_w = int(short_axis * 3.5) + PORE_PADDING
             bbox_h = int(short_axis * 1.5) + PORE_PADDING
             bx, by, bw, bh = convert_to_yolo_bbox(x, y, bbox_w, bbox_h, image.shape[1], image.shape[0])
