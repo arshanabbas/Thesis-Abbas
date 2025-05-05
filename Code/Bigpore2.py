@@ -14,161 +14,159 @@ dirs = {
     "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
 }
 
-os.makedirs(dirs["output_images_dir"], exist_ok=True)
-os.makedirs(dirs["output_labels_dir"], exist_ok=True)
-
 # -----------------------
 # Constants
 # -----------------------
 PORE_CLASS_ID = 0
 BOUNDARY_MARGIN = 4
 PORE_PADDING = 6
-MIN_DISTANCE_BETWEEN_PORES = 15
+MIN_DISTANCE_BETWEEN_PORES = 20
+
+os.makedirs(dirs["output_images_dir"], exist_ok=True)
+os.makedirs(dirs["output_labels_dir"], exist_ok=True)
 
 # -----------------------
-# Utilities
+# Utility Functions
 # -----------------------
-def load_image(image_path):
-    return cv2.imread(image_path)
+def load_image(path):
+    return cv2.imread(path)
 
-def parse_yolo_polygon_annotation(annotation_path, image_shape):
-    h, w = image_shape[:2]
-    polygons = []
-    with open(annotation_path, 'r') as f:
+def parse_polygons(path, shape):
+    h, w = shape[:2]
+    polys = []
+    with open(path, 'r') as f:
         for line in f:
             parts = line.strip().split()
             if int(parts[0]) != 3:
                 continue
             coords = list(map(float, parts[1:]))
-            points = [(int(x * w), int(y * h)) for x, y in zip(coords[::2], coords[1::2])]
-            polygons.append(np.array(points, dtype=np.int32))
-    return polygons
+            pts = [(int(x * w), int(y * h)) for x, y in zip(coords[::2], coords[1::2])]
+            polys.append(np.array(pts, dtype=np.int32))
+    return polys
 
-def polygon_to_mask(image_shape, polygons):
-    mask = np.zeros(image_shape[:2], dtype=np.uint8)
-    if polygons:
-        cv2.fillPoly(mask, polygons, 255)
+def polygon_to_mask(shape, polys):
+    mask = np.zeros(shape[:2], dtype=np.uint8)
+    if polys:
+        cv2.fillPoly(mask, polys, 255)
     return mask
 
-def is_far_from_existing(x, y, r, placed_pores):
-    for px, py, pr in placed_pores:
+def is_far(x, y, r, placed):
+    for px, py, pr in placed:
         if math.hypot(x - px, y - py) < (r + pr + MIN_DISTANCE_BETWEEN_PORES):
             return False
     return True
 
-def convert_to_yolo_bbox(x, y, w, h, image_w, image_h):
-    return x / image_w, y / image_h, (2 * w) / image_w, (2 * h) / image_h
+def convert_to_yolo_bbox(x, y, w, h, iw, ih):
+    return x / iw, y / ih, (2 * w) / iw, (2 * h) / ih
 
 # -----------------------
-# Soft Triangle Drawing
+# Bezier-Based Triangle Pore
 # -----------------------
-def draw_soft_triangle_pore(image, x, y, scale=0.5, angle=0):
-    # Triangle points
+def bezier_interp(p0, p1, p2, steps=30):
+    return [(1 - t)**2 * p0 + 2 * (1 - t) * t * p1 + t**2 * p2 for t in np.linspace(0, 1, steps)]
+
+def draw_bezier_triangle(image, x, y, scale=0.5, angle_deg=0):
     base_pts = np.array([
         [150, 50],
         [70, 220],
         [230, 220]
     ], dtype=np.float32)
 
-    radius = 28
-    arc_points = 30
-    edge_curve_points = 20
+    control_offset = 40
+    curve_steps = 20
     contour = []
 
-    for i in range(len(base_pts)):
-        p0 = base_pts[i - 1]
-        p1 = base_pts[i]
-        p2 = base_pts[(i + 1) % len(base_pts)]
+    for i in range(3):
+        p0 = base_pts[i]
+        p1 = base_pts[(i + 1) % 3]
+        p2 = base_pts[(i + 2) % 3]
 
-        v1 = p0 - p1
-        v2 = p2 - p1
-        v1 = v1 / np.linalg.norm(v1)
-        v2 = v2 / np.linalg.norm(v2)
+        d01 = p1 - p0
+        d12 = p2 - p1
+        d01 /= np.linalg.norm(d01)
+        d12 /= np.linalg.norm(d12)
 
-        angle_between = np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)) / 2
-        offset = radius / np.tan(angle_between)
-        p_start = p1 + v1 * offset
-        p_end = p1 + v2 * offset
+        edge_start = p1 - d01 * control_offset
+        edge_end = p1 + d12 * control_offset
 
-        arc = [(1 - t) * p_start + t * p_end for t in np.linspace(0, 1, arc_points)]
-        edge_vec = p_start - p0
-        edge = [p0 + t * edge_vec for t in np.linspace(0, 1, edge_curve_points)]
+        bezier_curve = bezier_interp(edge_start, p1, edge_end, steps=curve_steps)
+        contour.extend(bezier_curve)
 
-        contour.extend(edge)
-        contour.extend(arc)
+    contour = np.array(contour, dtype=np.float32)
 
-    # Rotate and scale
-    contour = np.array(contour) - [150, 150]
-    theta = np.radians(angle)
+    # Center, scale, rotate
+    center = np.mean(contour, axis=0)
+    contour = (contour - center) * scale
+
+    theta = np.radians(angle_deg)
     rot_matrix = np.array([
         [np.cos(theta), -np.sin(theta)],
         [np.sin(theta),  np.cos(theta)]
     ])
-    transformed = np.dot(contour * scale, rot_matrix.T) + [x, y]
-    contour = transformed.astype(np.int32).reshape((-1, 1, 2))
+    contour = np.dot(contour, rot_matrix.T)
 
-    # Draw
+    contour += np.array([x, y])
+    contour = contour.astype(np.int32).reshape((-1, 1, 2))
     cv2.fillPoly(image, [contour], color=(30, 30, 30), lineType=cv2.LINE_AA)
 
 # -----------------------
-# Pipeline
+# Main Dataset Pipeline
 # -----------------------
 def run_pipeline():
-    for filename in os.listdir(dirs["image_dir"]):
-        if not filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+    for fname in os.listdir(dirs["image_dir"]):
+        if not fname.lower().endswith(('.jpg', '.png')):
             continue
 
-        base_name = os.path.splitext(filename)[0]
-        image_path = os.path.join(dirs["image_dir"], filename)
-        annotation_path = os.path.join(dirs["annotation_dir"], base_name + ".txt")
+        base = os.path.splitext(fname)[0]
+        image_path = os.path.join(dirs["image_dir"], fname)
+        annot_path = os.path.join(dirs["annotation_dir"], base + ".txt")
 
-        if not os.path.exists(annotation_path):
-            print(f"⚠️ Skipping {filename} (no annotation)")
+        if not os.path.exists(annot_path):
+            print(f"⚠️ Skipping {fname} (no annotation)")
             continue
 
         image = load_image(image_path)
         if image is None:
             continue
 
-        polygons = parse_yolo_polygon_annotation(annotation_path, image.shape)
-        mask = polygon_to_mask(image.shape, polygons)
+        polys = parse_polygons(annot_path, image.shape)
+        mask = polygon_to_mask(image.shape, polys)
         margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
 
-        placed_pores = []
-        yolo_labels = []
+        labels, placed = [], []
         used_configs = set()
 
-        for _ in range(2):  # Two triangle pores
+        for _ in range(2):  # Add two triangle pores
             for _ in range(1000):
                 x = random.randint(0, image.shape[1] - 1)
                 y = random.randint(0, image.shape[0] - 1)
-                if margin_mask[y, x] != 255 or not is_far_from_existing(x, y, 10, placed_pores):
+                if margin_mask[y, x] != 255 or not is_far(x, y, 12, placed):
                     continue
 
+                scale = random.uniform(0.4, 0.5)
                 angle = random.randint(0, 360)
-                scale = random.uniform(0.45, 0.6)
                 config = (round(scale, 2), angle // 10)
                 if config in used_configs:
                     continue
                 used_configs.add(config)
 
-                draw_soft_triangle_pore(image, x, y, scale=scale, angle=angle)
-                bw, bh = int(30 * scale) + PORE_PADDING, int(30 * scale) + PORE_PADDING
-                bbox = convert_to_yolo_bbox(x, y, bw, bh, image.shape[1], image.shape[0])
-                yolo_labels.append((PORE_CLASS_ID, *bbox))
-                placed_pores.append((x, y, 10))
+                draw_bezier_triangle(image, x, y, scale=scale, angle_deg=angle)
+                bbox = convert_to_yolo_bbox(x, y, 30 * scale + PORE_PADDING, 30 * scale + PORE_PADDING,
+                                            image.shape[1], image.shape[0])
+                labels.append((PORE_CLASS_ID, *bbox))
+                placed.append((x, y, 12))
                 break
 
         # Save results
-        cv2.imwrite(os.path.join(dirs["output_images_dir"], filename), image)
-        with open(os.path.join(dirs["output_labels_dir"], base_name + ".txt"), "w") as f:
-            for label in yolo_labels:
+        cv2.imwrite(os.path.join(dirs["output_images_dir"], fname), image)
+        with open(os.path.join(dirs["output_labels_dir"], base + ".txt"), "w") as f:
+            for label in labels:
                 f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
-        print(f"✅ Processed {filename}")
+        print(f"✅ Saved {fname} with {len(labels)} triangle pores.")
 
 # -----------------------
-# Run it
+# Run
 # -----------------------
 if __name__ == "__main__":
     run_pipeline()
