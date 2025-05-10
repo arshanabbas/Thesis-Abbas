@@ -14,9 +14,6 @@ dirs = {
     "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation"
 }
 
-# -----------------------
-# Constants
-# -----------------------
 PORE_CLASS_ID = 0
 BOUNDARY_MARGIN = 4
 PORE_PADDING = 6
@@ -28,6 +25,9 @@ os.makedirs(dirs["output_labels_dir"], exist_ok=True)
 # -----------------------
 # Utility Functions
 # -----------------------
+def bezier_interp(p0, p1, p2, steps=30):
+    return [(1 - t)**2 * p0 + 2 * (1 - t) * t * p1 + t**2 * p2 for t in np.linspace(0, 1, steps)]
+
 def load_image(path):
     return cv2.imread(path)
 
@@ -60,57 +60,53 @@ def convert_to_yolo_bbox(x, y, w, h, iw, ih):
     return x / iw, y / ih, (2 * w) / iw, (2 * h) / ih
 
 # -----------------------
-# Bezier-Based Triangle Pore
+# Final Pore Shape: Variant 5 (Extreme Distortion)
 # -----------------------
-def bezier_interp(p0, p1, p2, steps=30):
-    return [(1 - t)**2 * p0 + 2 * (1 - t) * t * p1 + t**2 * p2 for t in np.linspace(0, 1, steps)]
-
-def draw_bezier_triangle(image, x, y, scale=0.5, angle_deg=0):
+def draw_variant5_pore(image, x, y, base_scale=0.45, rotation_deg=0):
     base_pts = np.array([
-        [150, 50],
-        [70, 220],
-        [230, 220]
+        [0, -28],
+        [-70, -4],
+        [-50, 30],
+        [65, 22]
     ], dtype=np.float32)
 
-    control_offset = 40
-    curve_steps = 20
-    contour = []
+    def extreme_distort_edges(pts, steps=14):
+        contour = []
+        for i in range(len(pts)):
+            p0 = pts[i - 1]
+            p1 = pts[i]
+            p2 = pts[(i + 1) % len(pts)]
 
-    for i in range(3):
-        p0 = base_pts[i]
-        p1 = base_pts[(i + 1) % 3]
-        p2 = base_pts[(i + 2) % 3]
+            smooth = 0.2 + random.uniform(-0.5, 0.5)
+            smooth = np.clip(smooth, 0.05, 0.5)
+            jitter_x = random.uniform(-10, 10)
+            jitter_y = random.uniform(-10, 10)
 
-        d01 = p1 - p0
-        d12 = p2 - p1
-        d01 /= np.linalg.norm(d01)
-        d12 /= np.linalg.norm(d12)
+            start = p1 + (p0 - p1) * smooth + np.array([jitter_x, jitter_y])
+            end = p1 + (p2 - p1) * smooth + np.array([-jitter_x, -jitter_y])
+            bezier = bezier_interp(start, p1, end, steps=steps)
+            contour.extend(bezier)
+        return np.array(contour, dtype=np.float32)
 
-        edge_start = p1 - d01 * control_offset
-        edge_end = p1 + d12 * control_offset
-
-        bezier_curve = bezier_interp(edge_start, p1, edge_end, steps=curve_steps)
-        contour.extend(bezier_curve)
-
-    contour = np.array(contour, dtype=np.float32)
-
-    # Center, scale, rotate
+    contour = extreme_distort_edges(base_pts)
     center = np.mean(contour, axis=0)
-    contour = (contour - center) * scale
+    contour -= center
+    contour[:, 0] *= base_scale * random.uniform(0.8, 1.2)
+    contour[:, 1] *= base_scale * random.uniform(0.65, 1.2)
 
-    theta = np.radians(angle_deg)
-    rot_matrix = np.array([
+    theta = np.radians(rotation_deg)
+    rot = np.array([
         [np.cos(theta), -np.sin(theta)],
         [np.sin(theta),  np.cos(theta)]
     ])
-    contour = np.dot(contour, rot_matrix.T)
-
+    contour = np.dot(contour, rot.T)
     contour += np.array([x, y])
     contour = contour.astype(np.int32).reshape((-1, 1, 2))
+
     cv2.fillPoly(image, [contour], color=(30, 30, 30), lineType=cv2.LINE_AA)
 
 # -----------------------
-# Main Dataset Pipeline
+# Main Pipeline Function
 # -----------------------
 def run_pipeline():
     for fname in os.listdir(dirs["image_dir"]):
@@ -134,36 +130,27 @@ def run_pipeline():
         margin_mask = cv2.erode(mask, np.ones((2 * BOUNDARY_MARGIN + 1, 2 * BOUNDARY_MARGIN + 1), np.uint8))
 
         labels, placed = [], []
-        used_configs = set()
 
-        for _ in range(2):  # Add two triangle pores
+        for _ in range(1):  # Add one extreme distorted pore
             for _ in range(1000):
                 x = random.randint(0, image.shape[1] - 1)
                 y = random.randint(0, image.shape[0] - 1)
-                if margin_mask[y, x] != 255 or not is_far(x, y, 12, placed):
+                if margin_mask[y, x] != 255 or not is_far(x, y, 20, placed):
                     continue
 
-                scale = random.uniform(0.4, 0.5)
-                angle = random.randint(0, 360)
-                config = (round(scale, 2), angle // 10)
-                if config in used_configs:
-                    continue
-                used_configs.add(config)
-
-                draw_bezier_triangle(image, x, y, scale=scale, angle_deg=angle)
-                bbox = convert_to_yolo_bbox(x, y, 30 * scale + PORE_PADDING, 30 * scale + PORE_PADDING,
-                                            image.shape[1], image.shape[0])
+                draw_variant5_pore(image, x, y, rotation_deg=random.randint(0, 360))
+                bbox = convert_to_yolo_bbox(x, y, 30 + PORE_PADDING, 30 + PORE_PADDING, image.shape[1], image.shape[0])
                 labels.append((PORE_CLASS_ID, *bbox))
-                placed.append((x, y, 12))
+                placed.append((x, y, 20))
                 break
 
-        # Save results
+        # Save
         cv2.imwrite(os.path.join(dirs["output_images_dir"], fname), image)
         with open(os.path.join(dirs["output_labels_dir"], base + ".txt"), "w") as f:
             for label in labels:
                 f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
 
-        print(f"✅ Saved {fname} with {len(labels)} triangle pores.")
+        print(f"✅ Saved {fname} with 1 Variant 5 pore.")
 
 # -----------------------
 # Run
