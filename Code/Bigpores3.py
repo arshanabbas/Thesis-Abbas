@@ -4,12 +4,12 @@ from scipy.interpolate import splprep, splev
 import os
 import random
 
-# Directories
+# Directories (New folder for Method 2)
 dirs = {
     "image_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/images",
     "annotation_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/yolov8",
-    "output_images_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/image_method1",
-    "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation_method1"
+    "output_images_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/image_method2",
+    "output_labels_dir": "F:/Pomodoro/Work/TIME/Script/Thesis-Abbas-Segmentation/PolygontoYOLO/ErrorPlayground/pore_dataset/annotation_method2"
 }
 
 os.makedirs(dirs["output_images_dir"], exist_ok=True)
@@ -27,28 +27,24 @@ def generate_pore_shape(scale=1.0):
     curve = np.stack(splev(u, tck), axis=-1).astype(np.int32)
     return curve
 
-def draw_pore_with_feather(image, center, scale=0.4):
+def draw_pore_soft_mask(image, center, scale=0.4):
     h, w = image.shape[:2]
     shape = generate_pore_shape(scale)
     shape[:, 0] += center[0] - shape[:, 0].mean().astype(int)
     shape[:, 1] += center[1] - shape[:, 1].mean().astype(int)
-    
+
+    # Create alpha mask
     mask = np.zeros((h, w), dtype=np.uint8)
     cv2.fillPoly(mask, [shape], 255)
-    
-    # Detect edges and feather only edges
-    edges = cv2.Canny(mask, 50, 150)
-    edges_blurred = cv2.GaussianBlur(edges, (7, 7), 3)
-    
-    # Create soft alpha mask
-    alpha = np.clip(edges_blurred.astype(float) / 255.0, 0, 0.7)
-    alpha = cv2.merge([alpha, alpha, alpha])
+    mask_blur = cv2.GaussianBlur(mask, (9, 9), 3)
 
-    # Blend pore with feathered edges into image
-    pore_color = np.zeros_like(image)
-    pore_color[mask == 255] = (0, 0, 0)
-    blended = (alpha * pore_color + (1 - alpha) * image).astype(np.uint8)
-    
+    # Blend using alpha mask
+    mask_blur_float = mask_blur.astype(float) / 255.0
+    mask_blur_float = cv2.merge([mask_blur_float]*3)
+
+    black_shape = np.zeros_like(image)
+    blended = (mask_blur_float * black_shape + (1 - mask_blur_float) * image).astype(np.uint8)
+
     return blended, shape
 
 def to_yolo_bbox(xmin, ymin, xmax, ymax, img_w, img_h):
@@ -86,7 +82,7 @@ for fname in os.listdir(dirs["image_dir"]):
         continue
 
     cx, cy = random.choice(valid)
-    image, pore_shape = draw_pore_with_feather(image, (cy, cx))
+    image, pore_shape = draw_pore_soft_mask(image, (cy, cx))
 
     xmin, ymin = pore_shape.min(axis=0)
     xmax, ymax = pore_shape.max(axis=0)
@@ -95,3 +91,4 @@ for fname in os.listdir(dirs["image_dir"]):
     cv2.imwrite(os.path.join(dirs["output_images_dir"], fname), image)
     with open(os.path.join(dirs["output_labels_dir"], fname.replace(".jpg", ".txt")), 'w') as f:
         f.write(f"{label[0]} {label[1]:.6f} {label[2]:.6f} {label[3]:.6f} {label[4]:.6f}\n")
+
