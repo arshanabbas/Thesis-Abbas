@@ -1,19 +1,29 @@
 from ultralytics import YOLO
+from pathlib import Path
 
 def main():
+    # Load YOLO model
     model = YOLO("yolo11n.pt")
 
-    train_results = model.train(
-        data="train.yaml",  # Path to the dataset configuration file
-        epochs=350,  # Set the number of training epochs
-        imgsz=640,  # Image size for training (input size for model)
-        device=0,  # Specify the device (0 for the first GPU, 'cpu' for CPU)
+    # Define safe output directory
+    save_project_dir = Path("runs/detect").resolve()
+    run_name = "train10"
+
+    # Train the model
+    model.train(
+        data="train.yaml",
+        epochs=350,
+        imgsz=640,
+        device=0,
+        name=run_name,
+        project=str(save_project_dir),
+        save=True,
     )
 
-    # After training, evaluate the model's performance on the validation set
-    metrics = model.val()
+    # Validate the model and save plots
+    metrics = model.val(save=True)
 
-    # Optionally, print or save evaluation metrics
+    # Show evaluation metrics
     print(metrics)
 
 if __name__ == '__main__':
