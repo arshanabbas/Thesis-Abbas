@@ -9,6 +9,7 @@ annotation_folder = 'D:/Abbas/GitHub/PolygontoYOLO/crack_dataset/labels'  # Path
 
 # Define structure
 dataset_folder = 'D:/Abbas/GitHub/PolygontoYOLO/dataset_crackyolo'
+
 train_image_folder = os.path.join(dataset_folder, 'images', 'train')
 val_image_folder = os.path.join(dataset_folder, 'images', 'val')
 train_label_folder = os.path.join(dataset_folder, 'labels', 'train')
