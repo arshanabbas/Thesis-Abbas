@@ -7,7 +7,7 @@ def main():
 
     # Define safe output directory
     save_project_dir = Path("runs/detect").resolve()
-    run_name = "train10"
+    run_name = "train11"
 
     # Train the model
     model.train(
