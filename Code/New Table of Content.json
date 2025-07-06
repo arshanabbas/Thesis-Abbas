@@ -62,24 +62,16 @@ Table of Contents
         4.2.1 Convolutional Neural Networks (CNNs)
         4.2.2 YOLO for Real-Time Defect Identification
         4.2.3 Transformer-Based Vision Models for Industrial AI
-    4.3 Data Augmentation & Domain Adaptation for Robust Defect Recognition
+    4.3 Data Augmentation & Domain Adaptation
     4.4 Result and Analysis
         4.4.1 Overview of the generated defects
     4.5 Conclusion
         4.5.1 Key Insights and Implications
         4.5.2 Key Takeaways
 
-5. Conclusion and Future Research
-    5.1 Conclusion
-    5.2 Future Enhancements: Real-Time AI, Edge Computing & Robotics
-    5.3 Potential for Fully Automated Welding Quality Inspection
+5. Conclusion and Future Work
+    5.1 Summary of Conclusion
+    5.2 Limitations and Challenges
+    5.3 Future Research: Real-Time AI, Edge Computing & Robotics
 
 Bibliography
-
-
---> Data Collection
---> Data Annotation
---> Data Preprocessing
---> Model Training
---> Model Evealuation
-
